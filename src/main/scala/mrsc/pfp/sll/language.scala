@@ -66,6 +66,9 @@ object SLLSyntax {
     case (Ctr(n1, args1), Ctr(n2, args2)) if n1 == n2     => walk1(args1 zip args2, s)
     case (FCall(n1, args1), FCall(n2, args2)) if n1 == n2 => walk1(args1 zip args2, s)
     case (GCall(n1, args1), GCall(n2, args2)) if n1 == n2 => walk1(args1 zip args2, s)
+    case (Where(e1, defs1), Where(e2, defs2)) 
+    	if (defs1 map {_.lhs}) == (defs2 map {_.lhs}) => 
+    	  walk1((e1,e2) :: ((defs1 map {_.rhs}) zip (defs2 map {_.rhs})), s)  
     case (Var(n), to) => s.get(n) match {
       case Some(to1) if to1 == to => Some(s)
       case Some(to1) if to1 != to => None
