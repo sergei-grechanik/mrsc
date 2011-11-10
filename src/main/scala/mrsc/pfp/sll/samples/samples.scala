@@ -4,11 +4,18 @@ import mrsc.core._
 import mrsc.pfp._
 import mrsc.pfp.sll._
 
-trait SC extends PFPRules[Expr]
+trait SC extends MultiResultSCRulesImpl[Expr, DriveInfo[Expr]]
   with SLLSyntax
   with SLLSemantics
   with Driving[Expr]
-  with Folding[Expr]
+  with InstanceOfFolding
+  with BinaryWhistle[Expr]
+
+trait SCEx extends MultiResultSCRulesExperimental[Expr, DriveInfo[Expr]]
+  with SLLSyntax
+  with SLLSemantics
+  with Driving[Expr]
+  with InstanceOfFolding
   with BinaryWhistle[Expr]
 
 // ClassicCurrentGen
@@ -16,9 +23,17 @@ class SC1(val program: Program, val ordering: PartialOrdering[Expr])
   extends SC
   with LowerMsgOrDrivingOnBinaryWhistle[Expr]
 
+class SC1Ex(val program: Program, val ordering: PartialOrdering[Expr])
+  extends SCEx
+  with LowerMsgOrDrivingOnBinaryWhistle[Expr]
+
 // MultiDoubleMsg
 class SC2(val program: Program, val ordering: PartialOrdering[Expr])
   extends SC
+  with DoubleMsgOnBinaryWhistle[Expr]
+
+class SC2Ex(val program: Program, val ordering: PartialOrdering[Expr])
+  extends SCEx
   with DoubleMsgOnBinaryWhistle[Expr]
 
 // MultiUpperAllBinaryGens
@@ -47,7 +62,7 @@ class SC7(val program: Program, val ordering: PartialOrdering[Expr])
   with DoubleAllBinaryGensOnBinaryWhistle[Expr]
 
 class MultiAllRebuildings(val program: Program, val ordering: PartialOrdering[Expr])
-  extends PFPRules[Expr]
+  extends MultiResultSCRulesImpl[Expr, DriveInfo[Expr]]
   with SLLSyntax
   with SLLSemantics
   with Driving[Expr]
@@ -56,7 +71,7 @@ class MultiAllRebuildings(val program: Program, val ordering: PartialOrdering[Ex
   with AllRebuildings[Expr]
 
 class MultiLowerRebuildings(val program: Program, val ordering: PartialOrdering[Expr])
-  extends PFPRules[Expr]
+  extends MultiResultSCRulesImpl[Expr, DriveInfo[Expr]]
   with SLLSyntax
   with SLLSemantics
   with Driving[Expr]
@@ -65,7 +80,7 @@ class MultiLowerRebuildings(val program: Program, val ordering: PartialOrdering[
   with LowerRebuildingsOnBinaryWhistle[Expr]
 
 class MultiUpperRebuildings(val program: Program, val ordering: PartialOrdering[Expr])
-  extends PFPRules[Expr]
+  extends MultiResultSCRulesImpl[Expr, DriveInfo[Expr]]
   with SLLSyntax
   with SLLSemantics
   with Driving[Expr]
@@ -74,16 +89,25 @@ class MultiUpperRebuildings(val program: Program, val ordering: PartialOrdering[
   with UpperRebuildingsOnBinaryWhistle[Expr]
 
 class MultiDoubleRebuildingsOnWhistle(val program: Program, val ordering: PartialOrdering[Expr])
-  extends PFPRules[Expr]
+  extends MultiResultSCRulesImpl[Expr, DriveInfo[Expr]]
   with SLLSyntax
   with SLLSemantics
   with Driving[Expr]
-  with Folding[Expr]
+  with InstanceOfFolding
+  with BinaryWhistle[Expr]
+  with DoubleRebuildingsOnBinaryWhistle[Expr]
+
+class MultiDoubleRebuildingsOnWhistleEx(val program: Program, val ordering: PartialOrdering[Expr])
+  extends MultiResultSCRulesExperimental[Expr, DriveInfo[Expr]]
+  with SLLSyntax
+  with SLLSemantics
+  with Driving[Expr]
+  with InstanceOfFolding
   with BinaryWhistle[Expr]
   with DoubleRebuildingsOnBinaryWhistle[Expr]
 
 class ClassicDangerousGen(val program: Program, val ordering: PartialOrdering[Expr])
-  extends PFPRules[Expr]
+  extends MultiResultSCRulesImpl[Expr, DriveInfo[Expr]]
   with SLLSyntax
   with SLLSemantics
   with Driving[Expr]
@@ -207,15 +231,20 @@ object Samples {
     print(info)
 
     val machines = List(
-      new SC2(task.program, HEByCouplingWhistle),
-      new MultiDoubleRebuildingsOnWhistle(task.program, HEWhistle),
-      new MultiAllRebuildings(task.program, HEWhistle))
-
+      new SC1(task.program, HEWhistle),
+      new SC1Ex(task.program, HEWhistle))
+      //new MultiDoubleRebuildingsOnWhistle(task.program, HEWhistle),
+      //new MultiDoubleRebuildingsOnWhistleEx(task.program, HEWhistle))
+      //new MultiAllRebuildingsEx(task.program, HEWhistle))
+      //HEByCouplingWhistle
+      
     machines foreach { m =>
       val gen = GraphGenerator(m, task.target)
       val (completed, unworkable) = count(gen)
       val res = expandRight(12, completed + "/" + unworkable)
       print(res)
+      
+      //residuateAndCheck(gen, task)
     }
 
     println()
@@ -247,11 +276,14 @@ object Samples {
     countGraphs(SLLTasks.namedTasks("LastDouble"))
     countGraphs(SLLTasks.namedTasks("App"))
     countGraphs(SLLTasks.namedTasks("Idle"))
+    countGraphs(SLLTasks.namedTasks("Ololo"))
 
     println()
-    println("1 - classic msg mix, he by coupling")
-    println("2 - all gens (up and down by whistle), he")
-    println("3 - always gen, he")
+    println("1 - classic")
+    println("2 - branch when folding with nontrivial substitution")
+    //println("1 - classic msg mix, he by coupling")
+    //println("2 - all gens (up and down by whistle), he")
+    //println("3 - always gen, he")
 
     println()
     println()
@@ -267,7 +299,7 @@ object Samples {
 
     countGraphsForTasks()
 
-    showResidualProgramsForTasks()
+    //showResidualProgramsForTasks()
 
   }
 

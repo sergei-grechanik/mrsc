@@ -11,6 +11,10 @@ trait MultiResultSCRules[C, D] extends GraphRewriteRules[C, D] {
   def drive(g: G): List[S]
   def rebuild(signal: Option[Warning], g: G): List[S]
 
+  override def steps(g: G): List[S];
+}
+
+trait MultiResultSCRulesImpl[C, D] extends MultiResultSCRules[C, D] {
   override def steps(g: G): List[S] = fold(g) match {
     case foldSteps if !foldSteps.isEmpty =>
       foldSteps
@@ -19,6 +23,21 @@ trait MultiResultSCRules[C, D] extends GraphRewriteRules[C, D] {
       val driveSteps = if (signal.isEmpty) drive(g) else List()
       val rebuildSteps = rebuild(signal, g)
       rebuildSteps ++ driveSteps
+  }
+}
+
+trait MultiResultSCRulesExperimental[C, D] extends MultiResultSCRules[C, D] {
+  val subclass: PartialOrdering[C]
+  override def steps(g: G): List[S] = {
+    val foldSteps = fold(g)
+    if(!foldSteps.isEmpty && foldSteps.exists({case FoldStep(base) => subclass.equiv(g.current.conf, base.conf)}))
+      foldSteps
+    else {
+      val signal = inspect(g)
+      val driveSteps = if (signal.isEmpty) drive(g) else List()
+      val rebuildSteps = rebuild(signal, g)
+      rebuildSteps ++ driveSteps ++ foldSteps
+    }
   }
 }
 

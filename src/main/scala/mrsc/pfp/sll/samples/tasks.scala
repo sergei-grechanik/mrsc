@@ -41,6 +41,9 @@ object SLLTasks {
     
     gOr(False(), x) = x;
     gOr(True(), x) = True();
+
+    gOlolo(Z()) = S(Z());
+    gOlolo(S(x)) = gOlolo(S(Z()));
 	"""
 
   val listProgram: Program =
@@ -109,7 +112,8 @@ object SLLTasks {
       "App" -> SLLTask("gApp(xs, xs)", listProgram),
       "EvenMult" -> SLLTask("gEven(gMult(m, n))", peanoProgram),
       "EvenSqr" -> SLLTask("gEven(gMult(m, m))", peanoProgram),
-      "Idle" -> SLLTask("gIdle(xs)", listProgram))
+      "Idle" -> SLLTask("gIdle(xs)", listProgram),
+      "Ololo" -> SLLTask("gOlolo(n)", peanoProgram))
       
    val task1 = SLLTask("gFib(S(S(S(S(S(S(Z())))))))", peanoProgram)
    val task2 = SLLTask("gRev(Cons(A(), Cons(B(), Cons(C(), Nil()))))", listProgram)

@@ -55,6 +55,16 @@ object SLLSyntax {
 
   def vars(t: Expr): List[Var] = vs(t).distinct
 
+  def isConst(c: Expr): Boolean = c match {
+    case Ctr(_, args) => args.map(isConst).fold(true)((a,b) => a && b)
+    case _ => false
+  }
+  
+  def isVar(c: Expr): Boolean = c match {
+    case Var(_) => true
+    case _ => false
+  }
+  
   def equiv(c1: Expr, c2: Expr): Boolean = instanceOf(c1, c2) && instanceOf(c2, c1)
 
   def instanceOf(t1: Expr, t2: Expr): Boolean = (t1.size >= t2.size) && (findSubst(t2, t1).isDefined)
@@ -132,4 +142,13 @@ trait SLLSemantics extends PFPSemantics[Expr] {
     val vars = p.args.indices.toList.map { i => Var("de_" + p.name + "_" + i + "/" + v.name) }
     Ctr(p.name, vars)
   }
+}
+
+trait InstanceOfFolding extends PFPRules[Expr] with PFPSyntax[Expr] {
+  override def fold(g: G): List[S] =
+    g.current.ancestors.find { n =>
+      SLLSyntax.findSubst(n.conf, g.current.conf).exists( s => 
+        s.forall({case Pair(_,e) => SLLSyntax.isConst(e) || SLLSyntax.isVar(e)})
+       )
+    } map {FoldStep(_)} toList
 }
