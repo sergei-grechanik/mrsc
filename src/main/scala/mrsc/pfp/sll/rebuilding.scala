@@ -60,9 +60,12 @@ object SLLRebuilding {
       for { (es1, sub) <- acc; (t, sub1) <- rebuild(top, e, sub) } yield (t :: es1, sub1)
     }
   }
+  
+  private val md = java.security.MessageDigest.getInstance("SHA-1")
+  private val encoder = new sun.misc.BASE64Encoder()
 
   // here we use top expression like #hash to prevent name collisions in the future
   // nice solution is welcome
   private def newName(e: Expr, top: Expr): Name =
-    "gen/" + e.toString() + "[" + top.toString() + "]"
+    "t" + encoder.encode(md.digest(("gen/" + e.toString() + "[" + top.toString() + "]").getBytes)).take(9)
 }
