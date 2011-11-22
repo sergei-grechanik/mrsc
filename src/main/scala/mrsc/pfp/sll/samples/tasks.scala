@@ -42,8 +42,17 @@ object SLLTasks {
     gOr(False(), x) = x;
     gOr(True(), x) = True();
 
+	gDouble(Z(), x) = x;
+	gDouble(S(y), x) = gDouble(y, S(S(x)));
+
     gOlolo(Z()) = S(Z());
     gOlolo(S(x)) = gOlolo(S(Z()));
+
+    gAck1(Z(), m) = gAck(m,1);
+    gAck1(S(n), m) = gAck(m,gAck(S(m), n));
+
+	gAck(Z(), n) = S(n);
+    gAck(S(m), n) = gAck1(n, m);
 	"""
 
   val listProgram: Program =
@@ -70,6 +79,33 @@ object SLLTasks {
     gIdle(Cons(x, xs)) = gIdle(gIdle(xs));
     gIdle(Nil()) = Nil();
     """
+    
+  val kmpProgram: Program =
+    """
+geqSymb(A(), y) = geqA(y);
+geqSymb(B(), y) = geqB(y);
+geqSymb(C(), y) = geqC(y);
+
+geqA(A()) = True();  geqA(B()) = False(); geqA(C()) = False();
+geqB(A()) = False(); geqB(B()) = True();  geqB(C()) = False();
+geqC(A()) = False(); geqC(B()) = False(); geqC(C()) = True();
+
+gif(True(), x, y) = x;
+gif(False(), x, y) = y;
+
+fmatch(p, s) = gm(p, s, p, s);
+
+gm(Nil(), ss, op, os) = True();
+gm(Cons(p, pp), ss, op, os) = gx(ss, p, pp, op, os);
+
+gx(Nil(), p, pp,  op, os) = False();
+gx(Cons(s, ss), p, pp,  op, os) = gif(geqSymb(p, s), gm(pp, ss, op, os), gn(os, op));
+
+gn(Nil(), op) = False();
+gn(Cons(s, ss), op) = gm(op, ss, op, ss);
+
+fmatchA(str) = fmatch(Cons(A(), Nil()), str);
+  """
 
   val tasks = List(
     SLLTask("gApp(x, y)", listProgram),
@@ -112,8 +148,11 @@ object SLLTasks {
       "App" -> SLLTask("gApp(xs, xs)", listProgram),
       "EvenMult" -> SLLTask("gEven(gMult(m, n))", peanoProgram),
       "EvenSqr" -> SLLTask("gEven(gMult(m, m))", peanoProgram),
+      "EvenDouble" -> SLLTask("gEven(gDouble(n, Z()))", peanoProgram),
       "Idle" -> SLLTask("gIdle(xs)", listProgram),
-      "Ololo" -> SLLTask("gOlolo(n)", peanoProgram))
+      "Ololo" -> SLLTask("gOlolo(n)", peanoProgram),
+      "KMP" -> SLLTask("fmatch(n,m)", kmpProgram),
+      "Ack" -> SLLTask("gAck(m, n)", peanoProgram))
       
    val task1 = SLLTask("gFib(S(S(S(S(S(S(Z())))))))", peanoProgram)
    val task2 = SLLTask("gRev(Cons(A(), Cons(B(), Cons(C(), Nil()))))", listProgram)
