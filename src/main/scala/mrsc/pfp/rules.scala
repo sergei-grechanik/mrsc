@@ -28,15 +28,23 @@ trait MultiResultSCRulesImpl[C, D] extends MultiResultSCRules[C, D] {
 
 trait MultiResultSCRulesExperimental[C, D] extends MultiResultSCRules[C, D] {
   val subclass: PartialOrdering[C]
+  var bases: Set[C] = Set()
   override def steps(g: G): List[S] = {
     val foldSteps = fold(g)
+    for(FoldStep(base) <- foldSteps) {
+      bases += base.conf
+    }
     if(!foldSteps.isEmpty && foldSteps.exists({case FoldStep(base) => subclass.equiv(g.current.conf, base.conf)}))
       foldSteps
     else {
       val signal = inspect(g)
       val driveSteps = if (signal.isEmpty) drive(g) else List()
       val rebuildSteps = rebuild(signal, g)
-      rebuildSteps ++ driveSteps ++ foldSteps
+      
+      if(foldSteps.isEmpty)
+    	rebuildSteps ++ driveSteps;
+      else
+    	foldSteps ++ driveSteps  
     }
   }
 }
