@@ -89,7 +89,7 @@ object SyntaxNormalization {
     def vn(x: Int): Name = "v." + x
 
     def fixBoundVars(e: Expr, m: ListMap[Name, Int]): Expr = e match {
-      case Var(n) => m.get(n).map(v).getOrElse(n)
+      case Var(n) => m.get(n).map(v).getOrElse(Var(n))
       case Ctr(n, args) => Ctr(n, args map { fixBoundVars(_, m) })
       case FCall(n, args) => FCall(n, args map { fixBoundVars(_, m) })
       case GCall(n, args) => GCall(n, args map { fixBoundVars(_, m) })
