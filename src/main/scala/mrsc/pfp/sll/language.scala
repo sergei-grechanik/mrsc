@@ -36,7 +36,7 @@ object SLLSyntax {
     case FCall(name, args) => FCall(name, args map { subst(_, m) })
     case GCall(name, args) => GCall(name, args map { subst(_, m) })
     case Where(e, defs)    => Where(subst(e, m), defs map { subst(_, m) })
-    case Let(e, bs)        => Let(subst(e, m), bs)
+    case Let(e, bs)        => Let(subst(e, m), bs map {case Pair(n,ex) => (n, subst(ex, m))})
   }
 
   private def subst(deff: Def, m: Subst[Expr]): Def = deff match {
@@ -49,7 +49,7 @@ object SLLSyntax {
     case Ctr(_, args)   => args.foldLeft(List[Var]())(_ ++ vs(_))
     case FCall(_, args) => args.foldLeft(List[Var]())(_ ++ vs(_))
     case GCall(_, args) => args.foldLeft(List[Var]())(_ ++ vs(_))
-    case Let(e, _)      => vs(e)
+    case Let(e, bs)      => vs(subst(e, Map(bs:_*))) //oh shit!
     case Where(e, _)    => vs(e)
   }
 
