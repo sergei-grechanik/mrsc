@@ -103,7 +103,7 @@ trait SLLSemantics extends PFPSemantics[Expr] {
         StopDriveStep()
 
       case ObservableCtr(Ctr(cn, args)) =>
-        DecomposeDriveStep({ Ctr(cn, _: List[Expr]) }, args)
+        DecomposeDriveStep({ Ctr(cn, _: List[Expr]) }, args, true)
 
       case DecLet(Let(term, bs)) =>
         val (names, es) = bs.unzip
@@ -151,4 +151,28 @@ trait InstanceOfFolding extends PFPRules[Expr] with PFPSyntax[Expr] {
         s.forall({case Pair(_,e) => SLLSyntax.isConst(e) || SLLSyntax.isVar(e)})
        )
     } map {FoldStep(_)} toList
+}
+
+trait FindSubstFolding
+	extends PFPRules[Expr] with PFPSyntax[Expr] {
+  
+  def findSubstFunction(from: Expr, to: Expr): Option[Subst[Expr]]
+  
+  override def fold(g: G): List[S] = {
+    val almost_safe_ancestors = 
+      (g.current :: g.current.ancestors).dropWhile( n =>
+    		  n.in != null && !n.in.driveInfo.nonSilent
+      )
+    
+    if(almost_safe_ancestors.isEmpty)
+      return List()
+    
+    val safe_ancestors = almost_safe_ancestors.tail 
+    
+    safe_ancestors.find { n =>
+      findSubstFunction(n.conf, g.current.conf).exists( s => 
+        s.forall({case Pair(_,e) => SLLSyntax.isConst(e) || SLLSyntax.isVar(e)})
+       )
+    } map {FoldStep(_)} toList
+  }
 }

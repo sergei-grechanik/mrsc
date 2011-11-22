@@ -18,11 +18,15 @@ import SLLSyntax._
      
      Note, that this code is purely functional: no vars.
  */
-object SLLResiduator extends Residuation[Expr] {
+case class SLLResiduator(findSubstFunction: (Expr, Expr) => Option[Subst[Expr]] = SLLSyntax.findSubst)
+	extends Residuation[Expr] {
 
   override def residuate(graph: TGraph[Expr, DriveInfo[Expr]]): Expr =
     SyntaxNormalization.fixNames(fold(graph, graph.root))
 
+  def residuate2(graph: TGraph[Expr, DriveInfo[Expr]]): Expr =
+    fold(graph, graph.root)
+    
   def fold(graph: TGraph[Expr, DriveInfo[Expr]], n: TNode[Expr, DriveInfo[Expr]]): Expr = n.base match {
     // base node
     case None if (graph.leaves.exists { _.base == Some(n.tPath) }) =>
@@ -36,7 +40,7 @@ object SLLResiduator extends Residuation[Expr] {
       val (f, vars) = signature(graph.get(fpath))
       val call = FCall(f, vars)
       val fnode = graph.get(fpath)
-      subst(call, findSubst(fnode.conf, n.conf).get)
+      subst(call, findSubstFunction(fnode.conf, n.conf).get)
     // transient reduction
     case _ => build(graph, n)
   }
@@ -46,12 +50,12 @@ object SLLResiduator extends Residuation[Expr] {
     case children @ (n1 :: ns) => n1.driveInfo match {
       case TransientStepInfo() =>
         fold(tree, n1.node)
-      case DecomposeStepInfo(compose) =>
+      case DecomposeStepInfo(compose, _) =>
         compose(children map { _.node } map { fold(tree, _) })
-      case VariantsStepInfo(_) =>
+      case VariantsStepInfo(_, _) =>
         val (fname, vs @ (v :: vars1)) = gSignature(n)
         val branches = children map { e =>
-          val VariantsStepInfo(Contraction(v, c @ Ctr(cn, _))) = e.driveInfo
+          val VariantsStepInfo(Contraction(v, c @ Ctr(cn, _)), _) = e.driveInfo
           val pat = Pat(cn, vars(c) map { _.name })
           GFun(fname, pat, vars1 map { _.name }, fold(tree, e.node))
         } sortBy (_.p.name)

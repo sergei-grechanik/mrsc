@@ -59,7 +59,7 @@ object Counting extends App {
     for (g <- gen) {
       completed += 1
       val tg = Transformations.transpose(g)
-      val expr = SLLResiduator.residuate(tg)
+      val expr = SLLResiduator().residuate(tg)
       residuals += expr
       if (completed > limit) {
         return Left(CountingResult(completed, residuals))

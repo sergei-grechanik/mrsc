@@ -43,14 +43,19 @@ case class Contraction[C](v: Name, pat: C) {
   def subst() = Map[Name, C](v -> pat)
 }
 
-sealed trait DriveInfo[C]
+sealed trait DriveInfo[C] {
+  val nonSilent: Boolean = false
+}
+
 case class TransientStepInfo[C] extends DriveInfo[C] {
   override def toString = "->"
 }
-case class DecomposeStepInfo[C](compose: List[C] => C) extends DriveInfo[C] {
+case class DecomposeStepInfo[C](compose: List[C] => C, nonsil: Boolean = false) extends DriveInfo[C] {
+  override val nonSilent = nonsil
   override def toString = ""
 }
-case class VariantsStepInfo[C](contr: Contraction[C]) extends DriveInfo[C] {
+case class VariantsStepInfo[C](contr: Contraction[C], nonsil: Boolean = false) extends DriveInfo[C] {
+  override val nonSilent = nonsil
   override def toString = contr.toString
 }
 
@@ -70,16 +75,16 @@ case class TransientDriveStep[C](next: C) extends DriveStep[C] {
   }
 }
 
-case class DecomposeDriveStep[C](compose: List[C] => C, parts: List[C]) extends DriveStep[C] {
+case class DecomposeDriveStep[C](compose: List[C] => C, parts: List[C], nonsil: Boolean = false) extends DriveStep[C] {
   val graphStep = {
-    val ns = parts map { (_, DecomposeStepInfo(compose)) }
+    val ns = parts map { (_, DecomposeStepInfo(compose, nonsil)) }
     AddChildNodesStep[C, DriveInfo[C]](ns)
   }
 }
 
 case class VariantsDriveStep[C](cases: List[(C, Contraction[C])]) extends DriveStep[C] {
   val graphStep = {
-    val ns = cases map { v => (v._1, VariantsStepInfo(v._2)) }
+    val ns = cases map { v => (v._1, VariantsStepInfo(v._2, true)) }
     AddChildNodesStep[C, DriveInfo[C]](ns)
   }
 }
