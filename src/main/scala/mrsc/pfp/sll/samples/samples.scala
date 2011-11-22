@@ -4,6 +4,75 @@ import mrsc.core._
 import mrsc.pfp._
 import mrsc.pfp.sll._
 
+trait FindSubstBySC {
+  val program: Program
+  val supercompiler = new SC7(program, HEByCouplingWithRedexWhistle)
+  
+  var cachedResiduals: Map[Expr, List[Expr]] = Map()
+  var cachedSubsts: Map[Pair[Expr, Expr], Option[Subst[Expr]]] = Map()
+  
+  def supercompile(e: Expr): List[Expr] = {
+    cachedResiduals.get(e) match {
+      case Some(l) => l
+      case None =>
+        val gen = GraphGenerator(supercompiler, e)
+        val i = for(g <- gen if g.isComplete)
+        			yield SLLResiduator().residuate(Transformations.transpose(g))
+        val l = i.take(1000).toList.distinct
+        cachedResiduals += Pair(e, l)
+        
+        //println("\nsupercompiled " + e + "\n" + l.length + "\n")
+        
+        return l
+    }
+  }
+  
+  def findSubstFunction(from: Expr, to: Expr): Option[Subst[Expr]] = {
+    cachedSubsts.get((from, to)) match {
+      case Some(s) =>
+        //println("\n" + from + "\n" + to + "\n" + s + "\n")
+        s
+      case None =>
+        SLLSyntax.findSubst(from, to) match {
+          case Some(s) =>
+            cachedSubsts += Pair((from,to), Some(s))
+            return Some(s)
+          case _ =>
+        }
+        
+        val sfrom = supercompile(from)
+        val sto = supercompile(to)
+        val i = 
+      		for(f <- sfrom.iterator; t <- sto.iterator; val s = SLLSyntax.findSubst(f, t); if s.isDefined)
+  		      yield (f, t, s.get)
+  		      
+  		if(i.isEmpty) {
+  		  cachedSubsts += Pair((from,to), None)
+  		  return None
+  		}
+	    else {
+	      val (f, t, sub) = i.next()
+	      cachedSubsts += Pair((from,to), Some(sub))
+	      println("\n" + from + "\n" + to + "\n" + f + "\n" + t + "\n" + sub + "\n")
+	      return Some(sub)
+	    }
+    }
+  }
+}
+
+trait TwoLevelSC extends MultiResultSCRulesImpl[Expr, DriveInfo[Expr]]
+  with SLLSyntax
+  with SLLSemantics
+  with Driving[Expr]
+  with FindSubstBySC
+  with FindSubstFolding
+  with BinaryWhistle[Expr]
+
+// MultiDoubleAllBinaryGens
+class SCTwo(val program: Program, val ordering: PartialOrdering[Expr])
+  extends TwoLevelSC
+  with DoubleAllBinaryGensOnBinaryWhistle[Expr]
+
 trait SC extends MultiResultSCRulesImpl[Expr, DriveInfo[Expr]]
   with SLLSyntax
   with SLLSemantics
@@ -143,9 +212,20 @@ object Samples {
     for (g <- gen if g.isComplete) {
       val t = Transformations.transpose(g)
       println(t)
-      val res = SLLResiduator.residuate(t)
+      val res = SLLResiduator().residuate(t)
       println(res)
       Checker.check(task, Lifting.expr2Task(res))
+    }
+  }
+  
+  private def residuate(gen: GraphGenerator[Expr, DriveInfo[Expr]], task: SLLTask): Unit = {
+    for (g <- gen if g.isComplete) {
+      val t = Transformations.transpose(g)
+      val (expr,defs) = Lifting.lift(SLLResiduator().residuate(t))
+      println(expr)
+      for(d <- defs)
+        println(d)
+      println("")
     }
   }
 
@@ -225,26 +305,82 @@ object Samples {
     }
     (completed, unworkable)
   }
+  
+  // count residual programs and graphs
+  def countResidual(
+      name: String,
+      task: SLLTask,
+      gen: GraphGenerator[Expr, DriveInfo[Expr]], 
+      subf: (Expr, Expr) => Option[Subst[Expr]] = SLLSyntax.findSubst): 
+    	  (Integer, Integer) = {
+    val graphs = gen.take(1000).toList.map(Transformations.transpose(_)).distinct
+    val progs = graphs.map(SLLResiduator(subf).residuate(_)).distinct
+    
+      //println("")
+      //println(graphs(0))
+      //println("")
+    //var n = 0;
+    //for(p <- graphs) {
+    //  val out = new java.io.FileWriter("residual" + n)
+    //  out.write(p.toString())
+    //  out.close 
+    //  n += 1
+    //} 
+    
+    var n = 0;
+    for(p <- progs) {
+      val tsk = Lifting.expr2Task(p)
+      val out = new java.io.FileWriter("residual-" + name + "-"  + n)
+      out.write(tsk.toString())
+      out.close
+      n += 1
+      Checker.check(task, tsk)
+    }
+    
+    /*for(g <- gen) {
+      val tree = Transformations.transpose(g)
+      val p = SLLResiduator(subf).residuate2(tree)
+      val tsk = Lifting.expr2Task(p)
+      Checker.check(task, tsk)
+    }*/
+    
+    return (progs.length, graphs.length)
+  }
 
   def countGraphs(task: SLLTask): Unit = {
     val info = expand(40, task.target.toString)
     print(info)
 
+    val sctwo = new SCTwo(task.program, HEByCouplingWithRedexWhistle)
+    
     val machines = List(
-      new SC1(task.program, HEWhistle),
-      new SC1Ex(task.program, HEWhistle))
+        (new SC7(task.program, HEByCouplingWithRedexWhistle), "1"),
+        (sctwo, "2")
+      //new SC1(task.program, HEByCouplingWithRedexWhistle),
+      //new SC1Ex(task.program, HEByCouplingWithRedexWhistle))
       //new MultiDoubleRebuildingsOnWhistle(task.program, HEWhistle),
       //new MultiDoubleRebuildingsOnWhistleEx(task.program, HEWhistle))
       //new MultiAllRebuildingsEx(task.program, HEWhistle))
       //HEByCouplingWhistle
+      )
       
-    machines foreach { m =>
+    machines foreach { case Pair(m, name) =>
       val gen = GraphGenerator(m, task.target)
-      val (completed, unworkable) = count(gen)
-      val res = expandRight(12, completed + "/" + unworkable)
+      val (ps, gs) = countResidual(name, task, gen, sctwo.findSubstFunction)
+      val res = expandRight(12, ps + "/" + gs)
       print(res)
       
-      //residuateAndCheck(gen, task)
+      m match {
+        case r : MultiResultSCRulesExperimental[Expr, DriveInfo[Expr]] =>
+          println("")
+          for(b <- r.bases)
+            println(b)
+          println("")
+          r.bases = Set()
+        case _ =>
+      }
+      
+      //residuate(gen, task)
     }
 
     println()
@@ -258,7 +394,8 @@ object Samples {
     println(header)
     println()
 
-    countGraphs(SLLTasks.namedTasks("NaiveFib"))
+    countGraphs(SLLTasks.namedTasks("EvenDouble"))
+    /*countGraphs(SLLTasks.namedTasks("NaiveFib"))
     //countGraphs(SLLTasks.namedTasks("FastFib"))
     countGraphs(SLLTasks.namedTasks("EqPlus"))
     countGraphs(SLLTasks.namedTasks("EqPlusa"))
@@ -276,8 +413,12 @@ object Samples {
     countGraphs(SLLTasks.namedTasks("LastDouble"))
     countGraphs(SLLTasks.namedTasks("App"))
     countGraphs(SLLTasks.namedTasks("Idle"))
-    countGraphs(SLLTasks.namedTasks("Ololo"))
+    countGraphs(SLLTasks.namedTasks("Ololo"))*/
+    //countGraphs(SLLTasks.namedTasks("KMP"))
+    //countGraphs(SLLTask("gEven(gMult(S(S(S(Z()))), n))", SLLTasks.peanoProgram))
 
+    //countGraphs(SLLTasks.namedTasks("EvenMult"))
+    
     println()
     println("1 - classic")
     println("2 - branch when folding with nontrivial substitution")
