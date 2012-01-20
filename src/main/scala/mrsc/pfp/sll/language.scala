@@ -103,7 +103,7 @@ trait SLLSemantics extends PFPSemantics[Expr] {
         StopDriveStep()
 
       case ObservableCtr(Ctr(cn, args)) =>
-        DecomposeDriveStep({ Ctr(cn, _: List[Expr]) }, args, true)
+        DecomposeDriveStep({ Ctr(cn, _: List[Expr]) }, args)
 
       case DecLet(Let(term, bs)) =>
         val (names, es) = bs.unzip
@@ -159,9 +159,10 @@ trait FindSubstFolding
   def findSubstFunction(from: Expr, to: Expr): Option[Subst[Expr]]
   
   override def fold(g: G): List[S] = {
+    // TODO: This is not correct. Should check nonsilentness.
     val almost_safe_ancestors = 
       (g.current :: g.current.ancestors).dropWhile( n =>
-    		  n.in != null && !n.in.driveInfo.nonSilent
+    		  n.in != null 
       )
     
     if(almost_safe_ancestors.isEmpty)
