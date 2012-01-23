@@ -60,7 +60,7 @@ object SC extends HigherSemantics[String]
     
   def supercompile(e: HExpr[String]): List[HExpr[String]] = {
     val gen = GraphGenerator(this, e)
-    val graphs = gen.take(10000).toList.map(Transformations.transpose(_))//.distinct
+    val graphs = gen.take(30).toList.map(Transformations.transpose(_))//.distinct
     graphs.map(HigherResiduator("_p" + _.toString()).residuate).map(normalize).distinct
   }
   
@@ -117,18 +117,35 @@ object SC extends HigherSemantics[String]
   }
   
   //var nnn = 0
+  val out = new java.io.FileWriter("allgraph.dot")
+
+  def nodeName(n: N): String =
+    "\"" + (if(n.ancestors.isEmpty) "" else n.ancestors.head.conf.hashName + "\\l") + n.conf.toString().replaceAllLiterally("\n", "\\l") + "\\l\""
+  
+  def drawStep(cur: N, s: S, style: String = ""): Unit = s match {
+    case FoldStep(base) =>
+      out.write(nodeName(cur) + " -> " + nodeName(base) + style + ";\n")
+    case AddChildNodesStep(ns) =>
+      for (n <- ns)
+        out.write(nodeName(cur) + " -> " + "\"" + cur.conf.hashName + "\\l" + n._1.toString().replaceAllLiterally("\n", "\\l") + "\\l\"" + style + ";\n")
+    case UpperStep(to, s) =>
+      drawStep(to, s, style)
+    case _ =>
+  }
   
   override def steps(g: G): List[S] = fold(g) match {
     case foldSteps if !foldSteps.isEmpty =>
       //println("====folding====")
       //println(foldSteps);
       //println("")
+      foldSteps map (drawStep(g.current, _, "[color=blue]"))
+      out.flush()
       foldSteps
     case foldSteps =>
       //println(g.current.conf)
       //println(g.incompleteLeaves.mkString("\n", "\n", "\n"))
       val signal = inspect(g)
-      val driveSteps = if (signal.isEmpty || g.current.ancestors.length < 20) drive(g) else List()
+      val driveSteps = if (signal.isEmpty || g.current.ancestors.length < 10) drive(g) else List()
       val rebuildSteps = rebuild(signal, g)
       //println("===drive steps===")
       //for(ds <- driveSteps)
@@ -138,7 +155,12 @@ object SC extends HigherSemantics[String]
       //if(nnn >= 8)
       //  List(CompleteCurrentNodeStep[HExpr[String], DriveInfo[HExpr[String]]]())
       //else
-      rebuildSteps ++ driveSteps
+      
+      rebuildSteps map (drawStep(g.current, _, "[style=dashed]"))
+      driveSteps map (drawStep(g.current, _, ""))
+      out.flush()
+      
+      driveSteps ++ rebuildSteps
   }
 }
 

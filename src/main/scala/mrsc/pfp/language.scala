@@ -77,6 +77,14 @@ case class DecomposeDriveStep[C](compose: List[C] => C, parts: List[C]) extends 
     val ns = parts map { (_, DecomposeStepInfo(compose)) }
     AddChildNodesStep[C, DriveInfo[C]](ns)
   }
+  
+//  // We may need this kind of equality but I'm not sure.
+//  override def equals(o: Any): Boolean = o match {
+//    case ds : DecomposeDriveStep[C] => ds.parts == parts && ds.compose(ds.parts) == compose(parts)
+//    case _ => false
+//  }
+//  
+//  override def hashCode = (compose(parts) :: parts).hashCode
 }
 
 case class VariantsDriveStep[C](cases: List[(C, Contraction[C])]) extends DriveStep[C] {
