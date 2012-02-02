@@ -27,7 +27,7 @@ object HigherGlobals {
   }
   
   def hash2str(h: WrappedArray[Byte], n: Int = 9): String =
-    encoder.encode(h.toArray).take(9)
+    encoder.encode(h.toArray).take(9).replaceAll("[^a-zA-Z0-9_]", "")
   
 }
 
@@ -319,6 +319,28 @@ object Higher {
   }
   
   def fromEither[T](e: Either[Int, T]): HExpr[T] = e.fold(HVar(_), HAtom(_))
+  
+  def hsize[T](expr: HExpr[T]): Int = expr match {
+    case HVar(_) => 1
+    case HAtom(_) => 1
+    case HErr(_) => 1
+    case HCtr(c, as) => 1 + as.map(hsize).sum
+    case HLambda(b) => 1 + hsize(b)
+    case HFix(h) => 1 + hsize(h)
+    case HCall(h, as) => 1 + hsize(h) + as.map(hsize).sum
+    case HMatch(e, cs) => 1 + hsize(e) + cs.map(x => hsize(x._2._2)).sum
+  }
+  
+  def hdepth[T](expr: HExpr[T]): Int = expr match {
+    case HVar(_) => 1
+    case HAtom(_) => 1
+    case HErr(_) => 1
+    case HCtr(c, as) => 1 + (0 :: as.map(hdepth)).max
+    case HLambda(b) => 1 + hdepth(b)
+    case HFix(h) => 1 + hdepth(h)
+    case HCall(h, as) => 1 + (h :: as).map(hdepth).max
+    case HMatch(e, cs) => 1 + (hdepth(e) :: cs.map(x => hdepth(x._2._2)).toList).max
+  }
 }
 
 

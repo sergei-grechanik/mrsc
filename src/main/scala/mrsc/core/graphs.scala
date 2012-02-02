@@ -43,7 +43,7 @@ case class SNode[C, D](
   conf: C,
   in: SEdge[C, D],
   base: Option[SPath],
-  sPath: SPath) {
+  sPath: SPath, baseNode: SNode[C,D] = null) {
 
   lazy val tPath = sPath.reverse
 
@@ -126,8 +126,8 @@ object Transformations {
    */
   def transpose[C, D, E](g: SGraph[C, D]): TGraph[C, D] = {
     require(g.isComplete)
-    val allLeaves = g.completeLeaves
-    val allNodes = g.completeNodes
+    val allLeaves = g.completeLeaves.distinct
+    val allNodes = g.completeNodes.distinct
     val orderedNodes = allNodes.sortBy(_.sPath)(PathOrdering)
     val rootNode = orderedNodes.head
 

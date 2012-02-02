@@ -48,9 +48,9 @@ case class SLLResiduator(findSubstFunction: (Expr, Expr) => Option[Subst[Expr]] 
   def build(tree: TGraph[Expr, DriveInfo[Expr]], n: TNode[Expr, DriveInfo[Expr]]): Expr = n.outs match {
     case Nil => n.conf
     case children @ (n1 :: ns) => n1.driveInfo match {
-      case TransientStepInfo() =>
+      case TransientStepInfo(_) =>
         fold(tree, n1.node)
-      case DecomposeStepInfo(compose) =>
+      case DecomposeStepInfo(compose, _) =>
         compose(children map { _.node } map { fold(tree, _) })
       case VariantsStepInfo(_) =>
         val (fname, vs @ (v :: vars1)) = gSignature(n)

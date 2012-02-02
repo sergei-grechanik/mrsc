@@ -46,14 +46,28 @@ case class Contraction[C](v: Name, pat: C) {
 sealed trait DriveInfo[C] {
 }
 
-case class TransientStepInfo[C] extends DriveInfo[C] {
+case class TransientStepInfo[C](hash: Integer = null) extends DriveInfo[C] {
+  override def hashCode = if(hash == null) 42 else hash
+  override def equals(o: Any): Boolean = o match {
+    case ds : TransientStepInfo[C] => ds.hash == hash
+    case _ => false
+  }
   override def toString = "->"
 }
-case class DecomposeStepInfo[C](compose: List[C] => C) extends DriveInfo[C] {
-  override def toString = ""
-}
+
 case class VariantsStepInfo[C](contr: Contraction[C]) extends DriveInfo[C] {
   override def toString = contr.toString
+}
+
+case class DecomposeStepInfo[C](compose: List[C] => C, hash: Integer = null) extends DriveInfo[C] {
+  override def toString = ""
+  
+  // TODO: It is a crutch, we should use first-order data structures instead.
+  override def hashCode = if(hash == null) compose.hashCode() else hash
+  override def equals(o: Any): Boolean = o match {
+    case ds : DecomposeStepInfo[C] => ds.hash == hash
+    case _ => false
+  }
 }
 
 sealed trait DriveStep[C] {
@@ -67,24 +81,24 @@ case class StopDriveStep[C] extends DriveStep[C] {
 
 case class TransientDriveStep[C](next: C) extends DriveStep[C] {
   val graphStep = {
-    val ns = List((next, TransientStepInfo[C]()))
+    val ns = List((next, TransientStepInfo[C](next.hashCode())))
     AddChildNodesStep[C, DriveInfo[C]](ns)
   }
 }
 
 case class DecomposeDriveStep[C](compose: List[C] => C, parts: List[C]) extends DriveStep[C] {
   val graphStep = {
-    val ns = parts map { (_, DecomposeStepInfo(compose)) }
+    val ns = parts map { (_, DecomposeStepInfo(compose, hashCode)) }
     AddChildNodesStep[C, DriveInfo[C]](ns)
   }
   
-//  // We may need this kind of equality but I'm not sure.
-//  override def equals(o: Any): Boolean = o match {
-//    case ds : DecomposeDriveStep[C] => ds.parts == parts && ds.compose(ds.parts) == compose(parts)
-//    case _ => false
-//  }
-//  
-//  override def hashCode = (compose(parts) :: parts).hashCode
+  // We may need this kind of equality but I'm not sure.
+  override def equals(o: Any): Boolean = o match {
+    case ds : DecomposeDriveStep[C] => ds.parts == parts && ds.compose(ds.parts) == compose(parts)
+    case _ => false
+  }
+  
+  override def hashCode = (compose(parts) :: parts).hashCode
 }
 
 case class VariantsDriveStep[C](cases: List[(C, Contraction[C])]) extends DriveStep[C] {

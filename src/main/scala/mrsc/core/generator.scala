@@ -19,6 +19,8 @@ case class RebuildStep[C, D](c: C) extends GraphRewriteStep[C, D]
 case class RollbackStep[C, D](to: SNode[C, D], c: C) extends GraphRewriteStep[C, D]
 // Similar to Rollback step, but more general (performs the s step on the to node).
 case class UpperStep[C, D](to: SNode[C, D], s: GraphRewriteStep[C, D]) extends GraphRewriteStep[C, D]
+// Composition of a AddChildNodesStep and a FoldStep.  
+case class RewriteThenFoldStep[C, D](c: C, di: D, baseNode: SNode[C, D]) extends GraphRewriteStep[C, D]
 
 case class GraphGenerator[C, D](rules: GraphRewriteRules[C, D], conf: C)
   extends Iterator[SGraph[C, D]] {
@@ -88,5 +90,7 @@ object GraphGenerator {
       val incompleteLeaves1 = g.incompleteLeaves.tail.remove(prune_?)
       val graph = SGraph(node :: incompleteLeaves1, completeLeaves1, completeNodes1)
       executeStep(s, graph)
+    case RewriteThenFoldStep(c, di, baseNode) =>
+      executeStep(FoldStep(baseNode), executeStep(AddChildNodesStep(List((c,di))), g))
   }
 }

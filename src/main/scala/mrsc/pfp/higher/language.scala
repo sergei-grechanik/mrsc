@@ -91,7 +91,12 @@ object HigherSyntax {
 	      case (HLambda(b1), HLambda(b2)) =>
 	        gen(b1, b2, n + 1).map(HLambda(_))
 	      case (HFix(b1), HFix(b2)) =>
-	        gen(b1, b2, n).map(HFix(_))
+	        val g = gen(b1, b2, n)
+	        g match {
+	          // TODO: We don't want to generalize functions.
+	          case Some(HAtom(Left((_,_)))) => None
+	          case _ => g.map(HFix(_))
+	        }
 	      case (HMatch(x1, cs1), HMatch(x2, cs2))
 	      		if cs1.toList.map(p => (p._1, p._2._1)) == cs2.toList.map(p => (p._1, p._2._1)) =>
 	        val x = gen(x1, x2, n)
@@ -104,7 +109,9 @@ object HigherSyntax {
 	          None
 	      case (HCall(f1, as1), HCall(f2, as2)) if as1.length == as2.length =>
 	        val genas = (f1 :: as1 zip f2 :: as2) map (p => gen(p._1, p._2, n))
-	        if(genas.forall(_.isDefined))
+	        // TODO: We put f1 == f2 here because we don't want to factor out functions
+	        // as it leads to great information loss.
+	        if(genas.forall(_.isDefined) && f1 == f2)
 	          Some(HCall(genas.head.get, genas.tail map (_.get)))
 	        else
 	          None
@@ -165,7 +172,7 @@ object HigherSyntax {
   def equiv[T](e1: HExpr[T], e2: HExpr[T]): Boolean = instanceOf(e1, e2) && instanceOf(e2, e1)
   def instanceOf[T](e1: HExpr[T], e2: HExpr[T]): Boolean = findSubst(e1, e2).isDefined
   
-  def subst[T](c: HExpr[T], sub: HSubst[T]): HExpr[T] = mapAll(sub)(c)
+  def subst[T](c: HExpr[T], sub: HSubst[T]): HExpr[T] = mapAll(((v:Either[Int, T]) => sub.getOrElse(v, fromEither(v))))(c)
 }
 
 import HigherSyntax._
@@ -201,8 +208,8 @@ case class HigherResiduator[T](
         val expr = n.outs match {
           case Nil => n.conf
           case chld => chld.head.driveInfo match {
-            case TransientStepInfo() => fold(chld.head.node)
-            case DecomposeStepInfo(comp) => comp(chld map (c => fold(c.node)))
+            case TransientStepInfo(_) => fold(chld.head.node)
+            case DecomposeStepInfo(comp, _) => comp(chld map (c => fold(c.node)))
           }
         }
         
