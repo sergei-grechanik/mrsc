@@ -18,7 +18,7 @@ case class SuperGraphGenerator[C, D](rules: GraphRewriteRules[C, D], conf: C) {
       g match {
       	case SGraph(inc, comL, comN) =>
       	  if(steps.isEmpty)
-      	    g = SGraph(inc.remove(l => l == cur), /*cur ::*/ comL, cur :: comN)
+      	    g = SGraph(inc.remove(l => l == cur), cur :: comL, cur :: comN)
       	  else
       		g = SGraph(inc.remove(l => l == cur), comL, comN)
       }
@@ -100,7 +100,7 @@ object SuperGraphGenerator {
       			n.conf.toString().replaceAllLiterally("\n", "\\l") + "\\l\""
       
     def proc(n: TNode[C,D], inc: Boolean = false) {
-      for(e <- n.outs if e.node.base.isDefined || !e.node.outs.isEmpty) {
+      for(e <- n.outs if e.node.base.isDefined || !e.node.outs.isEmpty || true) {
         val style = if(n.outs.filter(_.driveInfo == e.driveInfo).length == 1) "[color=red]" else ""
         dot += label(n) + " -> " + label(e.node) + style + ";\n"
         proc(e.node)

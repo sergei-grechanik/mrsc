@@ -65,7 +65,11 @@ case class DecomposeStepInfo[C](compose: List[C] => C, hash: Integer = null) ext
   // TODO: It is a crutch, we should use first-order data structures instead.
   override def hashCode = if(hash == null) compose.hashCode() else hash
   override def equals(o: Any): Boolean = o match {
-    case ds : DecomposeStepInfo[C] => ds.hash == hash
+    case ds : DecomposeStepInfo[C] =>
+      if(hash == null && ds.hash == null)
+        ds.compose == compose
+      else
+        ds.hash == hash
     case _ => false
   }
 }

@@ -238,6 +238,39 @@ object Higher {
     case HMatch(e, cs) => false
   }
   
+  def isVarConst[T](expr: HExpr[T]): Boolean = expr match {
+    case HVar(_) => true
+    case HAtom(_) => true
+    case HErr(_) => true
+    case HCtr(c, as) => as.forall(isVarConst)
+    case HLambda(b) => false
+    case HFix(h) => false
+    case HCall(h, as) => false
+    case HMatch(e, cs) => false
+  }
+  
+  def containsFix[T](expr: HExpr[T]): Boolean = expr match {
+    case HVar(_) => false
+    case HAtom(_) => false
+    case HErr(_) => false
+    case HCtr(c, as) => as.exists(containsFix)
+    case HLambda(b) => containsFix(b)
+    case HFix(h) => true
+    case HCall(h, as) => containsFix(h) || as.exists(containsFix)
+    case HMatch(e, cs) => containsFix(e) || cs.exists(x => containsFix(x._2._2)) 
+  }
+  
+  def nontrivialCall[T](expr: HExpr[T]): Boolean = expr match {
+    case HVar(_) => false
+    case HAtom(_) => false
+    case HErr(_) => false
+    case HCtr(c, as) => false
+    case HLambda(b) => false
+    case HFix(h) => true
+    case HCall(h, as) => nontrivialCall(h)
+    case HMatch(e, cs) => false 
+  }
+  
   def peel[T](expr: HExpr[T]): (HExpr[Either[Int, T]], List[HExpr[T]]) = {
 	  var n = 0
 	  var list : List[HExpr[T]] = List()
@@ -340,6 +373,17 @@ object Higher {
     case HFix(h) => 1 + hdepth(h)
     case HCall(h, as) => 1 + (h :: as).map(hdepth).max
     case HMatch(e, cs) => 1 + (hdepth(e) :: cs.map(x => hdepth(x._2._2)).toList).max
+  }
+  
+  def hsomething[T](expr: HExpr[T]): Int = expr match {
+    case HVar(_) => 0
+    case HAtom(_) => 0
+    case HErr(_) => 0
+    case HCtr(c, as) => as.map(hsomething).sum
+    case HLambda(b) => hsomething(b)
+    case HFix(h) => 1 + 2*hsomething(h)
+    case HCall(h, as) => hsomething(h) + as.map(hsomething).sum
+    case HMatch(e, cs) => hsomething(e) + cs.map(x => hsomething(x._2._2)).sum
   }
 }
 

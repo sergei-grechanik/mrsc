@@ -9,6 +9,7 @@ trait HigherSemantics[T] extends PFPSemantics[HExpr[T]] {
   protected val doNormalization = true
   
   type C = HExpr[T]
+  // TODO: Should normalize var names with fixDecomposition
   def driveStep(c: C): DriveStep[C] = {
     def norm[U](e: HExpr[U]): HExpr[U] = 
       if(doNormalization) normalize(e) else e
@@ -17,8 +18,6 @@ trait HigherSemantics[T] extends PFPSemantics[HExpr[T]] {
       // If c is in WHNF, we should peel off top-level lambdas and constructors. 
       val (fun,newcs) = peel(c)
       if(newcs.isEmpty)
-        // All kinds of drive steps are essentially DecomposeDriveSteps
-        // with different compose functions.
         StopDriveStep()
       else
 	    DecomposeDriveStep(unpeel(fun, _), newcs)
@@ -28,7 +27,9 @@ trait HigherSemantics[T] extends PFPSemantics[HExpr[T]] {
       val (fun,redex) = decompose(c)
       redex match {
         case HFix(h) =>
-          TransientDriveStep(norm(compose(fun, List(HCall(h, List(redex))))))
+          val beforenorm = compose(fun, List(HCall(h, List(redex))))
+          val afternorm = norm(beforenorm)
+          TransientDriveStep(afternorm)
           
         case HMatch(x, csmap) if isVarAtom(x) =>
           val cs = csmap.toList
@@ -136,6 +137,53 @@ object HigherSyntax {
     gen(expr1, expr2, 0).get
   }
   
+  // Returns e wrapped in HAtom(Left(_)) if it doesn't contain bound variables (which < n).
+  // Correctly shifts unbound variables.
+  private def genIfInd[T](e: HExpr[T], n: Int): List[HExpr[Either[HExpr[T], T]]] = {
+    if(isVarAtom(e))
+      return Nil
+    
+    try {
+    	val ne = mapVar(i => if(i >= n) HVar(i - n) else throw new Exception)(e)
+		List(HAtom(Left(ne)))
+    }
+    catch {
+      case _ => Nil
+    }
+  }
+  
+  def generalizations[T](expr: HExpr[T], n: Int = 0): List[HExpr[Either[HExpr[T], T]]] = expr match {
+    case HVar(_) => Nil
+    case HAtom(_) => Nil
+    case HErr(_) => Nil
+    case HCtr(c, as) =>
+      val as1 = as map mapVal(Right(_))
+      for(((a,t),p) <- as zip as1.tails.toList.tail zip as1.reverse.tails.toList.reverse; 
+    		  x <- genIfInd(a, n) ++ generalizations(a, n))
+        yield HCtr(c, p.reverse ++ List(x) ++ t)
+    case HLambda(b) =>
+      // Here we can factor out a function what we don't want.
+      // TODO: I think we should add an integer parameter to HLambdas to make them dual to HCall
+      (genIfInd(b, n+1) ++ generalizations(b, n+1)).map(HLambda(_))
+    case HFix(h) =>
+      generalizations(h, n).map(HFix(_))
+    case HCall(h, as) =>
+      val h1 = mapVal(Right(_:T))(h)
+      val as1 = as map mapVal(Right(_))
+      (generalizations(h, n).map(HCall(_, as1))) ++
+      (for(((a,t),p) <- as zip as1.tails.toList.tail zip as1.reverse.tails.toList.reverse; 
+    		  x <- genIfInd(a, n) ++ generalizations(a, n))
+        yield HCall(h1, p.reverse ++ List(x) ++ t))
+    case HMatch(e, cs) =>
+      val e1 = mapVal(Right(_:T))(e)
+      val cs1 = cs map {case (c,(k,b)) => (c,(k,mapVal(Right(_:T))(b)))}
+      generalizations(e, n).map(HMatch(_, cs1)) ++
+      genIfInd(e, n).map(HMatch(_, cs1)) ++
+      (for((c, (k, b)) <- cs;
+    		  x <- genIfInd(b, n+k) ++ generalizations(b, n+k))
+        yield HMatch(e1, cs1 + Pair(c, (k, x))))
+  }
+  
   def findSubst[T](from: HExpr[T], to: HExpr[T]): Option[HSubst[T]] = {
     val gen = generalize(from, to)
     
@@ -173,6 +221,36 @@ object HigherSyntax {
   def instanceOf[T](e1: HExpr[T], e2: HExpr[T]): Boolean = findSubst(e1, e2).isDefined
   
   def subst[T](c: HExpr[T], sub: HSubst[T]): HExpr[T] = mapAll(((v:Either[Int, T]) => sub.getOrElse(v, fromEither(v))))(c)
+  
+  
+  def renameUnbound[T](e: HExpr[T]): List[HExpr[T]] = {
+    val unbnd = unboundList(e)
+    mapAll((x:Either[Int, T]) => HVar(unbnd.indexOf(x)))(e) :: unbnd.map(fromEither)
+  }
+  
+  def stdCompose[T](l: List[HExpr[T]]): HExpr[T] = 
+    mapVar(i => l(i + 1))(l(0))
+   
+  def fixUnbound[T](e: HExpr[T]): (HExpr[T], HExpr[T] => HExpr[T]) = {
+    val unbnd = unboundList(e)
+    (mapAll((x:Either[Int, T]) => HVar(unbnd.indexOf(x)))(e), 
+        e => stdCompose(e :: unbnd.map(fromEither)))
+  }
+    
+  def fixSingle[T](e: HExpr[T]): (HExpr[T], HExpr[T] => HExpr[T]) = e match {
+    case HLambda(b) =>
+      val(e1,f) = fixSingle(b)
+      (e1, (x:HExpr[T]) => HLambda(f(x)))
+    case _ => fixUnbound(e)
+  }
+  
+  def fixDecomposition[T](compose: List[HExpr[T]] => HExpr[T], parts: List[HExpr[T]]): 
+	  (List[HExpr[T]] => HExpr[T], List[HExpr[T]]) = {
+    val newlist = parts.map(fixSingle)
+    val funlist = newlist.map(_._2)
+    (l => compose((funlist zip l).map({case (f,e) => f(e)})), newlist.map(_._1))
+  }
+    
 }
 
 import HigherSyntax._
