@@ -5,12 +5,39 @@ import mrsc.core._
 import mrsc.pfp._
 
 object MessyDefs {
-  type C = HExpr[String]
+  type C = HExpr[Any]
+  type Cf = HExpr[HFoldAtom[Any]]
 }
 
 import MessyDefs._
 import Higher._
 import HigherSyntax._
+
+case class HFoldAtom[T](value: Either[HExpr[T], T], safe: Boolean) {
+  def isFold = value.isLeft
+  def isAtom = value.isRight
+  def toExpr = value.fold(x => x, HAtom(_))
+  def orSafe(s: Boolean) = HFoldAtom(value, safe || s)
+}
+
+object HFoldAtom {
+  def apply[T](v: T, s: Boolean = false): HFoldAtom[T] = 
+    HFoldAtom(Right(v), s)
+  def apply[T](v: HExpr[T], s: Boolean): HFoldAtom[T] = 
+    HFoldAtom(Left(v), s)
+    
+  def isFoldOf[T](c: HExpr[T])(e: Either[Int, HFoldAtom[T]]): Boolean =
+    e.fold(_ => false, _.value == Left(c))
+  
+  def injection[T](c: HExpr[T]): HExpr[HFoldAtom[T]] =
+    mapAtom((x:T) => HAtom(HFoldAtom(Right(x), false)))(c)
+    
+  def expandFoldAtoms[T](c: HExpr[HFoldAtom[T]]): HExpr[T] =
+    mapAtom((_:HFoldAtom[T]).toExpr)(c)
+    
+  def orSafe[T](c: HExpr[HFoldAtom[T]], s: Boolean): HExpr[HFoldAtom[T]] =
+    mapVal((_:HFoldAtom[T]).orSafe(s))(c)
+}
 
 case class MEdge(
     source: MNode, 
@@ -47,13 +74,11 @@ class MNode(c: C, d: Int = Int.MaxValue) {
 }
 
 class Messy extends
-	HigherSemantics[String]
+	HigherSemantics[Any]
 {
   val conf2nodes = collection.mutable.Map[C, MNode]()
-  val supercompiled = collection.mutable.Map[MNode, Set[C]]()
-  val residuated = collection.mutable.Map[MNode, List[C]]()
   
-  var depthBnd = 10
+  var depthBnd = 20
   
   def dotLabel(n: MNode): String =
     "\"" + n.conf.hashName + "\\l" + n.conf.toString().replaceAllLiterally("\n", "\\l") + "\\l\""
@@ -115,7 +140,7 @@ class Messy extends
   }
   
   def whistle(node: MNode): Boolean = {
-    val whistled = /*ancestors(node)*/conf2nodes.values.filter(a => a != node && HHE.he(a.conf, node.conf))
+    val whistled = ancestors(node).filter(a => a != node && HHE.he(a.conf, node.conf))
     whistled.filter(genWhistled(node, _)).size >= 2
   }
   
@@ -126,7 +151,7 @@ class Messy extends
         //generalize(node)
       }
       else {
-        if(hsize(node.conf) <= 40)
+        if(hsize(node.conf) <= 50)
         	drive(node)
     	generalize(node)
       }
@@ -194,7 +219,7 @@ class Messy extends
     }
   }
   
-  def sndPart(e: HExpr[Either[HExpr[String], String]]) =
+  def sndPart(e: HExpr[Either[C, Any]]) =
 	unbound(e).find(_.fold(_ => false, _.isLeft)).get match {
 	  case Right(Left(x)) => x 
     }
@@ -209,7 +234,7 @@ class Messy extends
     		   sortBy(ge => -hsize(ge)*hsize(sndPart(ge))).
     		   take(15)) yield {
         val l = renameUnbound(g) map mapAtom(x => x.fold(y => y, HAtom(_)))
-        List((node, DecomposeDriveStep(stdCompose[String], l)))
+        List((node, DecomposeDriveStep(stdCompose[Any], l)))
       }
     
     println("done " + ddsl.size + "  total: " + conf2nodes.size)
@@ -221,9 +246,23 @@ class Messy extends
     for(n <- conf2nodes.values; 
     		if n.depth > 0 && n.depth != Int.MaxValue && containsFix(n.conf) && n.outs.isEmpty) {
       n.depth = Int.MaxValue
-      for(i <- n.ins)
+      for(i <- n.ins) {
+        for(d <- i.dests)
+          d.ins.remove(i)
         i.source.outs.remove(i)
-      n.ins.clear()
+      }
+      conf2nodes.remove(n.conf)
+      changed = true
+    }
+    for(n <- conf2nodes.values; 
+    		if n.depth > 0 && n.ins.isEmpty) {
+      n.depth = Int.MaxValue
+      for(o <- n.outs) {
+        for(d <- o.dests)
+          d.ins.remove(o)
+      }
+      n.outs.clear()
+      conf2nodes.remove(n.conf)
       changed = true
     }
     if(changed)
@@ -235,81 +274,28 @@ class Messy extends
     case Nil => List(Nil)
   }
   
-  def residuate(conf: C): List[C] =
-    residuate(conf2nodes(conf)).filter(c => !unbound(c).exists(_.isRight))
-  
-  def residuate(node: MNode, history: List[(Boolean, MNode)] = Nil): List[C] = {
-    if(history.size > depthBnd)
-      return List()
-      
-    val myname = "_f" + node.conf.hashName
-    val unbndargs = unboundList(node.conf).map(fromEither)
-    val safehist = history.dropWhile(_._1 == true) 
-    if(safehist.exists(_._2 == node) || (!safehist.isEmpty && safehist(0)._2.depth >= node.depth)) {
-      List(HCall(HAtom(myname), unbndargs))
-    }
-    else if(node.outs.isEmpty)  {
-      List(node.conf)
-    }
-    else {
-      val already = residuated.get(node)
-      if(already.isDefined)
-        return already.get
-      
-      val all =
-      (for(e <- node.outs) yield {
-        val children = sequence(e.dests.map(residuate(_, (e.silent, node) :: history).toList))
-        for(l <- children) yield {
-          if(l.exists(c => unbound(c).contains(Right(myname)))) {
-        	  val expr = e.compose(l)
-        	  val unbnd = unboundList(node.conf).reverse
-	          val corr = unbnd zip (0 to unbnd.size - 1)
-	          val corr1 = corr ++ List((Right(myname), unbnd.size))
-	          val closed = mapAll((a:Either[Int,String]) => corr1.toMap.mapValues(HVar(_)).get(a).getOrElse(fromEither(a)))(expr)
-	          normalize(HCall(HFix(hlambdas(closed, corr1.length)), corr.map(_._1.fold(HVar(_), HAtom(_))).reverse))
-          }
-          else {
-            normalize(e.compose(l))
-          }
-        }
-      }).flatten.toList.distinct.sortBy(hsize(_))
-      
-      val count = Math.max(1, 10*(depthBnd - node.depth)/depthBnd)
-      
-      val best = all//.take(count)
-      println(all.size)
-      val newlevel = all.filter(nontrivialCall).filter(c => !unbound(c).exists(_.isRight))
-      
-      residuated.update(node, best)
-      
-      val bestclosed = newlevel.take(count)
-      val before = supercompiled.getOrElse(node, Set())
-      supercompiled.update(node, (before ++ bestclosed).toList.sortBy(hsize(_)).take(count).toSet)  
-      
-      best
-    }
-  }
-  
-  def makeFold(c: C): C = {
-    val myname = "_f" + c.hashName
-    val unbndargs = unboundList(c).map(fromEither)
+  def makeFold(c: C): Cf = {
+    val myname = HFoldAtom(Left(c), false)
+    val unbndargs = unboundList(HFoldAtom.injection(c)).map(fromEither)
     HCall(HAtom(myname), unbndargs)
   }
   
-  def makeFix(base: C, c: C): C = {
-    // TODO: We should control correctness here
-    // I think we should mark each occurrence of a reference to this node
-    // with the silentness of the path to it
-    val myname = "_f" + base.hashName
+  def makeFix(base: C, c: Cf): Cf = {
+    val myname = HFoldAtom(Left(base), true)
     if(unbound(c).contains(Right(myname))) {
-      val unbnd = unboundList(base).reverse
+      val unbnd = unboundList(HFoldAtom.injection(base)).reverse
 	  val corr = unbnd zip (0 to unbnd.size - 1)
 	  val corr1 = corr ++ List((Right(myname), unbnd.size))
-	  val closed = mapAll((a:Either[Int,String]) => corr1.toMap.mapValues(HVar(_)).get(a).getOrElse(fromEither(a)))(c)
+	  val closed = mapAll((a:Either[Int,HFoldAtom[Any]]) => corr1.toMap.mapValues(HVar(_)).get(a).getOrElse(fromEither(a)))(c)
 	  HCall(HFix(hlambdas(closed, corr1.length)), corr.map(_._1.fold(HVar(_), HAtom(_))).reverse)
     }
-    else
+    else if(unbound(c).contains(Right(HFoldAtom(Left(base), false)))) {
+      val injbase = HFoldAtom.injection(base)
+      replaceVarAtom(HAtom(HFoldAtom(Left(base), false)), injbase)(c)
+    }
+    else {
       c
+    }
   }
   
   def residuate2(naive: Boolean = false): Map[C, List[C]] = {
@@ -322,15 +308,15 @@ class Messy extends
       		  !doms(m).contains(n) && 
       		  !doms(n).contains(m)))}).toMap
       		  
-    val done = collection.mutable.Map[MNode, List[C]]()
+    val done = collection.mutable.Map[MNode, List[Cf]]()
       		  
-    def resid(node: MNode, hist: Set[MNode], protect: Set[MNode]): List[C] = {
+    def resid(node: MNode, hist: Set[MNode], protect: Set[MNode]): List[Cf] = {
       val d = done.get(node)
       if(hist.contains(node)) {
         List(makeFold(node.conf))
       }
       else if(node.outs.isEmpty) {
-        List(node.conf)
+        List(HFoldAtom.injection(node.conf))
       }
       else if(d.isDefined && !protect.contains(node)) {
         d.get
@@ -340,10 +326,10 @@ class Messy extends
         val unclosed = 
 	        (for(e <- node.outs.toList) yield {
 	          val children = sequence(e.dests.map(resid(_, hist + node, protect)))
-	          children.map(e.compose(_))
+	          children.map(c => HFoldAtom.orSafe(e.compose(c).asInstanceOf[Cf], !e.silent))
 	        }).flatten
 	        
-        unclosed.map(makeFix(node.conf, _)).map(normalize(_)).distinct.sortBy(hsize(_)).take(15)
+        unclosed.map(makeFix(node.conf, _)).map(normalize(_)).distinct.sortBy(hsize(_)).take(3)
       }
       else {
         val protect1 = protect ++ protsets(node) + node
@@ -362,17 +348,17 @@ class Messy extends
 	  for(n <- conf2nodes.values; if n.depth == 0)
 	    resid(n, Set(), Set())
 	    
-	  conf2nodes.mapValues(n => done.get(n).map(_.filter(c => !unbound(c).exists(_.isRight))).toList.flatten).toMap
+	  conf2nodes.mapValues(n => done.get(n).map(_.filter(c => true || !unbound(c).exists(_.isRight))).toList.flatten).toMap
     }
   }
   
-  def levelUp() {
-    for((node,s) <- supercompiled; c <- s) {
+  def levelUp(resid: Map[C, List[C]]) {
+    for((conf,s) <- resid; c <- s) {
+      val node = conf2nodes(conf)
       val (f,l) = fixDecomposition((l:List[C]) => l(0), List(c))
       val n = addUninitConf(l(0))
       addEdge(new MEdge(node, f, List(n), true, 1))
     }
-    supercompiled.clear()
   }
 }
 

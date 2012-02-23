@@ -385,18 +385,27 @@ object Test  {
     //imessy(m, e)
     m.truncate()
     //m.conf2nodes.values.toList.filter(x => containsFix(x.conf)).sortBy(-_.ins.size).take(10).map(x => println(x.conf))
+    var resid = m.residuate2(false)
+    val rs = resid(e)
+    println("Residuals: " + rs.size)
+    //val rsn = m.residuate2(true)(e)
+    //println("Naive Residuals: " + rs.size)
+    
+    //if(rsn.toSet != rs.toSet)
+    //  println("BUG!")
+    
+    for(i <- 1 to 1) {
+      println(i)
+      m.levelUp(resid)
+      resid = m.residuate2()
+      m.truncate()
+      println("Residuals: " + resid(e).size)
+    }
+    
     o.write(m.toDot())
     o.close()
-    val lolo = m.residuate2(false)
-    val rs = lolo(e)
-    println("Residuals: " + rs.size)
-    val rsn = m.residuate2(true)(e)
-    println("Naive Residuals: " + rs.size)
     
-    if(rsn.toSet != rs.toSet)
-      println("BUG!")
-    
-    rs.toSet
+    resid(e).toSet.asInstanceOf[Set[HExpr[String]]]
     //throw new Exception
   }
   
@@ -435,18 +444,19 @@ object Test  {
 	//val add = p("\\a b -> (Y \\ f x y -> case x of { S x -> S (f x y); Z -> y; }) b a")
 	//val add = p("Y \\ f x -> case x of { S x -> S (f x); Z -> Z; }")
     
-    //val expr = mapAtom(HigherGlobals.getByName)(p("\\x -> addAcc (addAcc x (Z)) (Z)"))
+    //val expr = mapAtom(HigherGlobals.getByName)(p("\\x y -> add (add x (S(Z))) y"))
     //val expr = HigherGlobals.getByName("fict")
     //val expr = HigherGlobals.getByName("idle")
     //val expr = HigherGlobals.getByName("add")
     //val expr = HigherGlobals.getByName("rev")
-    //val expr = HigherGlobals.getByName("snrev")
+    val expr = HigherGlobals.getByName("snrev")
     //val expr = HigherGlobals.getByName("evenBad")
     //val expr = HigherGlobals.getByName("evenDblAcc")
-    val expr = HigherGlobals.getByName("a1a1nrev")
+    //val expr = HigherGlobals.getByName("a1a1nrev")
     
 	def test(h: HExpr[String]): HExpr[String] = {
       val d = HCall(h, List(p("S (S (S (Z)))")/*, p("S (S (S (Z)))")*/))
+      //val d = HCall(h, List(p("S (S (S (Z)))"), p("S (S (S (Z)))")))
       //val d = HCall(h, List(p("S (Z)")))
       evaluate(d)
       //printCounters()
