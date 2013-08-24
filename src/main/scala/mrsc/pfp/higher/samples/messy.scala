@@ -46,7 +46,7 @@ case class MEdge(
     silent: Boolean = true, 
     cost: Int = 1) {
   lazy val exprList = {
-    val lst = dests.map(_.conf)
+    val lst = dests.map(_.conf.unchild)
     (compose(lst) :: lst)
   }
   lazy val hash = exprList.hashCode
@@ -54,7 +54,7 @@ case class MEdge(
   override def hashCode = hash
   override def equals(o: Any): Boolean = o match {
     case e : MEdge =>
-    	exprList == e.exprList
+      exprList == e.exprList
     case _ => false
   }
 }
@@ -68,27 +68,27 @@ class MNode(c: C, d: Int = Int.MaxValue) {
   override def hashCode = c.hashCode()
   override def equals(o: Any): Boolean = o match {
     case e : MNode =>
-    	conf == e.conf
+      conf == e.conf
     case _ => false
   }
 }
 
-class Messy extends
+class Messy(supergraph: Boolean = false) extends
 	HigherSemantics[Any]
 {
   val conf2nodes = collection.mutable.Map[C, MNode]()
   
-  var depthBnd = 20
+  var depthBnd = 10//20
   
   def dotLabel(n: MNode): String =
-    "\"" + n.conf.hashName + "\\l" + n.conf.toString().replaceAllLiterally("\n", "\\l") + "\\l\""
+    "\"" + /*n.conf.hashName + "\\l" +*/ n.conf.toString().replaceAllLiterally("\n", "\\l") + "\\l\""
     
   def toDot(): String = {
     val doms = dominators()
     
     def dotStyle(n: MNode): String = {
 	    if(successors(n).forall(s => doms(s).contains(n) || !successors(s).contains(n)))
-	      "[color=red]"
+	      ""//"[color=red]"
 	    else
 	      ""
     }
@@ -101,8 +101,11 @@ class Messy extends
     }).mkString("") 
   }
   
-  def addUninitConf(conf: C): MNode = 
-    conf2nodes.getOrElseUpdate(conf, new MNode(conf))
+  def addUninitConf(conf: C, parent: C = null): MNode =
+    if(supergraph)
+      conf2nodes.getOrElseUpdate(HChild(conf, parent), new MNode(HChild(conf, parent)))
+    else
+      conf2nodes.getOrElseUpdate(conf, new MNode(conf))
     
   def addConf(conf: C, depth: Int = 0): MNode = {
     val n = addUninitConf(conf)
@@ -119,7 +122,7 @@ class Messy extends
   }
     
   def updateDepth(node: MNode, depth: Int) {
-    if(conf2nodes.size > 10000) throw new Exception
+    if(conf2nodes.size > 50000) throw new Exception
     if(node.depth > depth) {
       val olddepth = node.depth
       node.depth = depth
@@ -145,8 +148,13 @@ class Messy extends
   }
   
   def expandNode(node: MNode, olddepth: Int = Int.MaxValue) {
+    if(supergraph && ancestors(node).exists(n => n.conf.unchild == node.conf.unchild))
+      return
+      
     if(olddepth >= depthBnd && node.depth < depthBnd) {
-      if(whistle(node)) {
+      drive(node)
+      generalize(node)
+      /*if(whistle(node)) {
         //drive(node)
         //generalize(node)
       }
@@ -154,7 +162,7 @@ class Messy extends
         if(hsize(node.conf) <= 50)
         	drive(node)
     	generalize(node)
-      }
+      }*/
     }
   }
   
@@ -201,7 +209,7 @@ class Messy extends
   }
   
   def drive(node: MNode) =
-    performDriveStep(node, driveStep(node.conf))
+    performDriveStep(node, driveStep(node.conf.unchild))
   
   def performDriveStep(node: MNode, ds: DriveStep[C], silent: Boolean = false) {
     ds match {
@@ -209,12 +217,12 @@ class Messy extends
       case TransientDriveStep(c) =>
         val cost = 1
         val (f,l) = fixDecomposition((l:List[C]) => l(0), List(c))
-        val n = addUninitConf(l(0))
+        val n = addUninitConf(l(0), node.conf)
         addEdge(new MEdge(node, f, List(n), true, cost))
       case DecomposeDriveStep(comp, l0) =>
         val cost = 1
         val (f,l) = fixDecomposition(comp, l0)
-        val ns = l map addUninitConf
+        val ns = l map (addUninitConf(_, node.conf))
         addEdge(new MEdge(node, f, ns, silent, cost))
     }
   }
@@ -226,10 +234,10 @@ class Messy extends
   
   def generalize(node: MNode) {
     
-    println("generalizing")
+    //println("generalizing")
 
     val ddsl =
-      for(g <- generalizations(node.conf).
+      for(g <- generalizations(node.conf.unchild).
     		   filter(x => unbound(x).size <= 2).
     		   sortBy(ge => -hsize(ge)*hsize(sndPart(ge))).
     		   take(15)) yield {
@@ -237,20 +245,22 @@ class Messy extends
         List((node, DecomposeDriveStep(stdCompose[Any], l)))
       }
     
-    println("done " + ddsl.size + "  total: " + conf2nodes.size)
+    //println("done " + ddsl.size + "  total: " + conf2nodes.size)
     ddsl.flatten.map({case (n,d) => performDriveStep(n, d, true)})
   }
   
   def truncate() {
     var changed = false
     for(n <- conf2nodes.values; 
-    		if n.depth > 0 && n.depth != Int.MaxValue && containsFix(n.conf) && n.outs.isEmpty) {
+    		if n.depth > 0 && n.depth != Int.MaxValue && containsFix(n.conf.unchild) && n.outs.isEmpty) {
       n.depth = Int.MaxValue
       for(i <- n.ins) {
-        for(d <- i.dests)
+        for(d <- i.dests if d != n) {
           d.ins.remove(i)
+        }
         i.source.outs.remove(i)
       }
+      n.ins.clear()
       conf2nodes.remove(n.conf)
       changed = true
     }
@@ -298,6 +308,8 @@ class Messy extends
     }
   }
   
+  var count = 0
+  
   def residuate2(naive: Boolean = false): Map[C, List[C]] = {
     val doms = dominators()
     val succs = conf2nodes.values.map(n => (n, successors(n))).toMap
@@ -311,6 +323,8 @@ class Messy extends
     val done = collection.mutable.Map[MNode, List[Cf]]()
       		  
     def resid(node: MNode, hist: Set[MNode], protect: Set[MNode]): List[Cf] = {
+      count += 1
+      if(count % 2000 == 0) print(".")
       val d = done.get(node)
       if(hist.contains(node)) {
         List(makeFold(node.conf))
@@ -329,7 +343,7 @@ class Messy extends
 	          children.map(c => HFoldAtom.orSafe(e.compose(c).asInstanceOf[Cf], !e.silent))
 	        }).flatten
 	        
-        unclosed.map(makeFix(node.conf, _)).map(normalize(_)).distinct.sortBy(hsize(_)).take(3)
+        unclosed.map(makeFix(node.conf, _)).map(normalize(_)).distinct.sortBy(hsize(_)).take(1)
       }
       else {
         val protect1 = protect ++ protsets(node) + node
@@ -342,7 +356,7 @@ class Messy extends
     }
     
     if(naive) {
-      conf2nodes.mapValues(n => if(n.depth == 0) resid(n, Set(), Set()) else Nil).toMap
+      conf2nodes.mapValues(n => if(n.depth == 0) { val r = resid(n, Set(), Set()); r } else Nil).toMap
     }
     else {
 	  for(n <- conf2nodes.values; if n.depth == 0)
@@ -350,6 +364,87 @@ class Messy extends
 	    
 	  conf2nodes.mapValues(n => done.get(n).map(_.filter(c => true || !unbound(c).exists(_.isRight))).toList.flatten).toMap
     }
+  }
+  
+  def residuate3(): Map[C, List[C]] = {
+    val doms = dominators()
+    val succs = conf2nodes.values.map(n => (n, successors(n))).toMap
+      		  
+    val done = collection.mutable.Map[(MNode, Set[MNode]), List[Cf]]()
+    
+    def resid1(node: MNode, hist: Set[MNode]): List[Cf] = {
+      resid(node, hist.intersect(succs(node)))
+    }
+    
+    def resid(node: MNode, hist: Set[MNode]): List[Cf] = {
+      count += 1
+      if(count % 2000 == 0) print(".")
+      val d = done.get((node, hist))
+      if(hist.contains(node)) {
+        List(makeFold(node.conf))
+      }
+      else if(node.outs.isEmpty) {
+        List(HFoldAtom.injection(node.conf))
+      }
+      else if(d.isDefined) {
+        d.get
+      }
+      else {
+        val unclosed = 
+	        (for(e <- node.outs.toList) yield {
+	          val children = sequence(e.dests.map(resid1(_, hist + node)))
+	          children.map(c => HFoldAtom.orSafe(e.compose(c).asInstanceOf[Cf], !e.silent))
+	        }).flatten
+	        
+        val r = unclosed.map(makeFix(node.conf, _)).map(normalize(_)).distinct.sortBy(hsize(_)).take(1)
+        done += Pair(Pair(node, hist), r)
+        r
+      }
+    }
+    
+	for(n <- conf2nodes.values; if n.depth == 0)
+	  resid(n, Set())
+	  
+	conf2nodes.mapValues(n => done.get(n, doms(n) - n).map(_.filter(c => true || !unbound(c).exists(_.isRight))).toList.flatten).toMap
+  }
+  
+  def residTest(): Map[C, Int] = {
+    val doms = dominators()
+    val succs = conf2nodes.values.map(n => (n, successors(n))).toMap
+      		  
+    val done = collection.mutable.Map[(MNode, Set[MNode]), Int]()
+    
+    def resid1(node: MNode, hist: Set[MNode]): Int = {
+      resid(node, hist.intersect(succs(node)))
+    }
+    
+    def resid(node: MNode, hist: Set[MNode]): Int = {
+      count += 1
+      if(count % 20000 == 0) print(".")
+      val d = done.get((node, hist))
+      if(hist.contains(node)) {
+        1
+      }
+      else if(node.outs.isEmpty) {
+        1
+      }
+      else if(d.isDefined) {
+        d.get
+      }
+      else {
+        val r = 
+	        (for(e <- node.outs.toList) yield {
+	          e.dests.map(resid1(_, hist + node)).product
+	        }).sum
+        done += Pair(Pair(node, hist), r)
+        r
+      }
+    }
+    
+	for(n <- conf2nodes.values; if n.depth == 0)
+	  resid(n, Set())
+	  
+	conf2nodes.mapValues(n => done.get((n, doms(n) - n)).getOrElse(0)).toMap
   }
   
   def levelUp(resid: Map[C, List[C]]) {

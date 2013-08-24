@@ -36,11 +36,25 @@ sealed trait HExpr[+T] {
   lazy val hash = HigherGlobals.hash(toStringSimple)
   def hashName: String = HigherGlobals.hash2str(hash)
   
-  protected def toString1: String
+  /*protected*/ def toString1: String
   
   override def toString = HigherGlobals.hash2name.getOrElse(hash, toString1)
   
   protected def indent(s: String): String = "  " + s.replace("\n", "\n  ")
+  
+  val unchild = this
+}
+
+case class HChild[T](expr: HExpr[T], parent: HExpr[T]) extends HExpr[T] {
+  override def toStringSimple = expr.toStringSimple
+  override def toString1 = expr.toString1
+  override val unchild = expr
+  
+  override lazy val hash = 
+    if(parent == null)
+      HigherGlobals.hash(toStringSimple)
+    else
+      HigherGlobals.hash(toStringSimple + parent.hashName) 
 }
 
 case class HAtom[T](value: T) extends HExpr[T] {
@@ -247,6 +261,7 @@ object Higher {
     case HFix(h) => false
     case HCall(h, as) => false
     case HMatch(e, cs) => false
+    case HChild(e, _) => isVarConst(e)
   }
   
   def containsFix[T](expr: HExpr[T]): Boolean = expr match {
@@ -258,6 +273,7 @@ object Higher {
     case HFix(h) => true
     case HCall(h, as) => containsFix(h) || as.exists(containsFix)
     case HMatch(e, cs) => containsFix(e) || cs.exists(x => containsFix(x._2._2)) 
+    case HChild(e, _) => containsFix(e)
   }
   
   def nontrivialCall[T](expr: HExpr[T]): Boolean = expr match {
@@ -269,6 +285,7 @@ object Higher {
     case HFix(h) => true
     case HCall(h, as) => nontrivialCall(h)
     case HMatch(e, cs) => false 
+    case HChild(e, _) => nontrivialCall(e)
   }
   
   def peel[T](expr: HExpr[T]): (HExpr[Either[Int, T]], List[HExpr[T]]) = {

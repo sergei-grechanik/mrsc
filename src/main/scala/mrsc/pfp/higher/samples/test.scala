@@ -375,7 +375,7 @@ object Test  {
     } catch {
       case _ => printf("limit reached =========")
     }
-//    m.truncate()
+    m.truncate()
 //    m.residuate(e)
 //    try {
 //      m.levelUp()
@@ -383,30 +383,89 @@ object Test  {
 //      case _ => printf("limit reached =========")
 //    }
     //imessy(m, e)
-    m.truncate()
+    /*m.truncate()
     //m.conf2nodes.values.toList.filter(x => containsFix(x.conf)).sortBy(-_.ins.size).take(10).map(x => println(x.conf))
-    var resid = m.residuate2(false)
+    println("residuating2")
+    var resid = m.residuate3()
     val rs = resid(e)
     println("Residuals: " + rs.size)
+    println("residuating3")
+    var resid3 = m.residuate3()
+    val rs3 = resid3(e)
+    println("Residuals: " + rs3.size)
+    println("equal: " + (rs == rs3))
     //val rsn = m.residuate2(true)(e)
     //println("Naive Residuals: " + rs.size)
-    
+    */
     //if(rsn.toSet != rs.toSet)
     //  println("BUG!")
     
-    for(i <- 1 to 1) {
-      println(i)
-      m.levelUp(resid)
-      resid = m.residuate2()
-      m.truncate()
-      println("Residuals: " + resid(e).size)
-    }
+//    for(i <- 1 to 1) {
+//      println(i)
+//      m.levelUp(resid)
+//      resid = m.residuate2()
+//      m.truncate()
+//      println("Residuals: " + resid(e).size)
+//    }
+    
     
     o.write(m.toDot())
     o.close()
     
-    resid(e).toSet.asInstanceOf[Set[HExpr[String]]]
-    //throw new Exception
+    //resid(e).toSet.asInstanceOf[Set[HExpr[String]]]
+    throw new Exception
+  }
+  
+  def testmessy(e: HExpr[String]) = {
+    print(e)
+    val sup = new Messy(true)
+    val tru = new Messy
+    try {
+    	//sup.addConf(e)
+    } catch {
+      case _ =>
+    }
+    try {
+    	tru.addConf(e)
+    } catch {
+      case _ =>
+    }
+    //sup.truncate()
+    //tru.truncate()
+    //print("\t& " + sup.conf2nodes.size + "\t& " + tru.conf2nodes.size)
+    tru.truncate()
+    print("\t& " + tru.conf2nodes.size)
+    
+   // try {
+    //val nrr = tru.residuate2(true)(e)
+    //val nrc = tru.count
+    //print("\t& " + nrc)
+    //}
+    //catch {
+    //  case _ => print("\t& $> 2000$")
+    //}
+    
+    tru.count = 0
+    
+    //try {
+//    val mp = tru.residuate3()
+//    val rr = mp(e)
+//    val rc = tru.count
+//    print("\t& " + rc)
+//    
+//    print("\t& " + rr.size)
+    //}
+    //catch {
+    //  case _ => print("\t& $> 2000$")
+    //}
+    
+    //if(nrr != rr)
+    //  print("BUG")
+    
+    val tst = tru.residTest()(e)
+    print("\t& " + tru.count + "\t& " + tst)
+    
+    print("\t\\\\\\hline\n")
   }
   
   def main(args: Array[String]):Unit = {
@@ -445,11 +504,12 @@ object Test  {
 	//val add = p("Y \\ f x -> case x of { S x -> S (f x); Z -> Z; }")
     
     //val expr = mapAtom(HigherGlobals.getByName)(p("\\x y -> add (add x (S(Z))) y"))
+    val expr = HigherGlobals.getByName("mul")
     //val expr = HigherGlobals.getByName("fict")
     //val expr = HigherGlobals.getByName("idle")
     //val expr = HigherGlobals.getByName("add")
     //val expr = HigherGlobals.getByName("rev")
-    val expr = HigherGlobals.getByName("snrev")
+    //val expr = HigherGlobals.getByName("snrev")
     //val expr = HigherGlobals.getByName("evenBad")
     //val expr = HigherGlobals.getByName("evenDblAcc")
     //val expr = HigherGlobals.getByName("a1a1nrev")
@@ -467,13 +527,22 @@ object Test  {
       "size: " + hsize(h) + " depth: " + hdepth(h) + " smth: " + hsomething(h)
     
     println(expr)
-	println(test(expr))
+	//println(test(expr))
 	
 	val mainsc = caching(supertree(SC()))
 	val mainsc1 = caching(supertree(SC(), true))
 	//val mainsc = caching(sequential(SC(), 100))
 	val twosc = supertree(SCTwo(mainsc), true)
 	//val twosc = sequential(SCTwo(mainsc), 100)
+	
+	/*
+	testmessy(HigherGlobals.getByName("add"))
+	testmessy(HigherGlobals.getByName("mul"))
+	testmessy(HigherGlobals.getByName("fict"))
+	testmessy(HigherGlobals.getByName("idle"))
+	testmessy(HigherGlobals.getByName("evenBad"))
+	testmessy(HigherGlobals.getByName("nrev"))
+	return*/
 	
 	val sc = messy(expr)
 	//val sc = twosc(expr)
