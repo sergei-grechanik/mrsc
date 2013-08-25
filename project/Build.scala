@@ -1,17 +1,24 @@
 import sbt._
 import Keys._
+import com.typesafe.sbt.SbtStartScript
+import SbtStartScript.StartScriptKeys._
 
 object MRSCBuild extends Build {
 
   override lazy val settings = super.settings ++ Seq(scalaVersion := "2.10.1")
 
   lazy val MRSCProject = Project("mrsc", file("src/mrsc"),
-    settings = Project.defaultSettings ++ Seq(
+    settings = Project.defaultSettings ++ 
+    SbtStartScript.startScriptForClassesSettings ++
+    Seq(
       organization := "mrsc",
       name := "mrsc",
       version := "0.5",
+      mainClass in Compile := Some("mrsc.frontend.CLI"),
       libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.0.0",
       libraryDependencies += "org.scalatest" %% "scalatest" % "1.9.1" % "test",
+      libraryDependencies += "org.rogach" %% "scallop" % "0.9.2",
+      startScriptName <<= target / "mrsc-cli",
       unmanagedBase := file("lib"),
       fork := true,
       baseDirectory in run := file("."),
