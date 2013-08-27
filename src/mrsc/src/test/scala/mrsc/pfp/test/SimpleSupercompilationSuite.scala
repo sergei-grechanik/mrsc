@@ -4,6 +4,7 @@ import org.scalatest.FunSuite
 
 import mrsc.core._
 import mrsc.pfp._
+import mrsc.pfp.Implicits._
 
 // only UpperMsg??
 class ClassicSC(val gc: GContext) extends PFPRules

@@ -3,6 +3,7 @@ package mrsc.pfp.test
 import org.scalatest.FunSuite
 
 import mrsc.pfp._
+import mrsc.pfp.Implicits._
 
 class SyntaxSuite extends FunSuite {
   test("checking for extraction") {

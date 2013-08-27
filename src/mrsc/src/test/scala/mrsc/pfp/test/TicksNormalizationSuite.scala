@@ -3,6 +3,7 @@ package mrsc.pfp.test
 import org.scalatest.FunSuite
 import mrsc.core.test.DebugInfo
 import mrsc.pfp._
+import mrsc.pfp.Implicits._
 
 class TicksNormalizationSuite extends FunSuite with DebugInfo {
   import NamedSyntax._

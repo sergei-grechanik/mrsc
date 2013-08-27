@@ -6,6 +6,7 @@ import mrsc.pfp._
 import NamelessShows._
 import mrsc.core._
 import mrsc.core.test.DebugInfo
+import mrsc.pfp.Implicits._
 
 class TicksEvaluationSuite extends FunSuite with DebugInfo {
   case class SC2(val gc: GContext) extends PFPRules

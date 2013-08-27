@@ -13,11 +13,13 @@ package object pfp {
   // substitution
   type Subst = Map[FVar, Term]
 
-  implicit def t(s: String): Term =
-    PFPParsers().inputTerm(s)
-
-  implicit def bc(s: String): GContext =
-    PFPParsers().inputBindings(s)
+  object Implicits {
+    implicit def t(s: String): Term =
+      PFPParsers().inputTerm(s)
+  
+    implicit def bc(s: String): GContext =
+      PFPParsers().inputBindings(s)
+  }
 
   // factory method for supercompilers
   type PFPSC = GContext => PFPRules
