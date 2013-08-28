@@ -1,0 +1,321 @@
+package mrsc.frontend
+
+import mrsc.core._
+import mrsc.pfp._
+
+import scala.collection.immutable.TreeMap
+import com.twitter.util.Eval
+import java.io.File
+
+import ec._
+import ec.simple._
+import ec.util._
+import ec.vector._
+
+sealed trait Param {
+  def size: Int = this match {
+    case ParamString(_) => 1
+    case ParamInt(_) => 1
+    case ParamRecord(fs) => fs.values.map(_.size).sum 
+  }
+  
+  def apply(s: String): Param = 
+    this.asInstanceOf[ParamRecord].fields(s)
+    
+  override def toString = this match {
+    case ParamString(s) => s
+    case ParamInt(i) => i.toString
+    case ParamRecord(fs) => 
+      fs.toList.map{ case (s,v) => s + " -> " + v.toString.replaceAll("\n", "\n  ") }
+        .mkString("{\n", "\n", "\n}")
+  }
+}
+
+case class ParamString(str: String) extends Param { override def toString = str }
+case class ParamInt(int: Int) extends Param
+case class ParamRecord(fields: TreeMap[String, Param]) extends Param
+
+sealed trait ParamDescription {
+  def param2ints(p: Param): List[Int] = this match {
+    case ParamDescrOneOf(strs) =>
+      List(strs.indexOf(p.asInstanceOf[ParamString].str))
+    case ParamDescrRecord(fs) =>
+      val ParamRecord(fields) = p
+      fs.toList.map(p => (p._1, p._2.param2ints(fields(p._1)))).map(_._2).flatten
+  }
+  
+  def ints2param(l: List[Int]): Param = this match {
+    case ParamDescrOneOf(strs) =>
+      ParamString(strs(l(0)))
+    case ParamDescrRecord(fs) =>
+      var curl = l
+      val pars =
+        for((s, pd) <- fs.toList) yield {
+          val par = pd.ints2param(curl)
+          curl = curl.drop(par.size)
+          (s, par)
+        }
+      ParamRecord(TreeMap(pars:_*))
+  }
+  
+  def size: Int = this match {
+    case ParamDescrOneOf(_) => 1
+    case ParamDescrInt(_, _) => 1
+    case ParamDescrRecord(fs) => fs.values.map(_.size).sum 
+  }
+  
+  def bounds: List[(Int, Int)] = this match {
+    case ParamDescrOneOf(ss) => List((0, ss.size - 1))
+    case ParamDescrInt(mn, mx) => List((mn, mx))
+    case ParamDescrRecord(fs) => fs.values.flatMap(_.bounds).toList
+  }
+}
+
+case class ParamDescrOneOf(strs: List[String]) extends ParamDescription
+case class ParamDescrInt(min: Int, max: Int) extends ParamDescription
+case class ParamDescrRecord(fields: TreeMap[String, ParamDescription]) extends ParamDescription
+
+object SCBuilder {
+  def oneOf(ss: String*) = ParamDescrOneOf(ss.toList)
+  
+  val SCParamDescr = ParamDescrRecord(TreeMap(
+      "driving" -> oneOf(
+        "PositiveDriving", 
+        "Driving",
+        "LetDriving"),
+      "ec" -> oneOf(
+        "AllEmbeddingCandidates",
+        "ControlEmbeddingCandidates"),
+      "whistle" -> oneOf(
+        "NoWhistle",
+        "HE3Whistle",
+        "HE3ByCouplingWhistle"),
+      "rebuild" -> oneOf(
+        "NoRebuildings",
+        "AllRebuildings",
+        "LowerRebuildingsOnBinaryWhistle",
+        "LowerAllBinaryGensOnBinaryWhistle",
+        "UpperRebuildingsOnBinaryWhistle",
+        "DoubleRebuildingsOnBinaryWhistle",
+        "UpperAllBinaryGensOnBinaryWhistle",
+        "DoubleAllBinaryGensOnBinaryWhistle",
+        "LowerAllBinaryGensOrDriveOnBinaryWhistle",
+        "UpperAllBinaryGensOrDriveOnBinaryWhistle",
+        "UpperMsgOnBinaryWhistle",
+        "UpperMsgOrLowerMggOnBinaryWhistle",
+        "LowerMsgOrUpperMggOnBinaryWhistle",
+        "LowerMsgOrDrivingOnBinaryWhistle",
+        "LowerMsgOrUpperMsgOnBinaryWhistle",
+        "UpperMsgOrLowerMsgOnBinaryWhistle",
+        "DoubleMsgOnBinaryWhistle")
+      ))
+      
+  def scCode(p: Param): String = {
+    val mixins = 
+      List(p("driving"), "AllFoldingCandidates", "Folding", p("ec"), p("whistle"), p("rebuild"))
+    """import mrsc.pfp._  
+    class SC(val gc: GContext) extends PFPRules with PFPSemantics with """ + 
+    mixins.mkString(" with ") + "\n((g:GContext) => new SC(g))"
+  }
+      
+  def mkSC(p: Param): PFPSC = {
+    (new Eval)[PFPSC](scCode(p))
+  }
+}
+
+trait SupercompilationProblem extends Problem with SimpleProblemForm {
+  
+  def evaluateSC(sc: PFPSC, info: String): List[Int]
+  
+  def vec2par(state: EvolutionState, vec: IntegerVectorIndividual): Param = {
+    try {
+      SCBuilder.SCParamDescr.ints2param(vec.genome.toList)
+    } catch {
+      case e:Throwable =>
+        val bnds = SCBuilder.SCParamDescr.bounds
+        val con =
+          vec.genome.toList + "\n" +
+          "pop.subpop.0.species.genome-size = " + bnds.size + "\n" +
+            (for(((mn,mx), i) <- bnds.zipWithIndex) yield {
+              "pop.subpop.0.species.min-gene." + i + " = " + mn + "\n" +
+              "pop.subpop.0.species.max-gene." + i + " = " + mx + "\n"
+            }).reduce(_ + _)
+        state.output.warning(e.toString())
+        state.output.fatal("The int vector doesn't satisfy the constraints:\n" + con)
+        throw e
+    }
+  }
+  
+  override def describe(state: EvolutionState, ind: Individual, sp: Int, th: Int, log: Int) {
+    ind match {
+      case vec: IntegerVectorIndividual =>
+        val par = vec2par(state, vec)
+        state.output.log(log).writer.println(
+            "Description of " + vec.genome.toList + ":\n" + par)
+      case _ =>
+        state.output.fatal("Individual must be an int vector")
+    }
+  }
+  
+  override def evaluate(state: EvolutionState, ind: Individual, sp: Int, th: Int) {
+    if(ind.evaluated) return
+    ind match {
+      case vec: IntegerVectorIndividual =>
+        val par = vec2par(state, vec)
+          
+        val info = vec.genome.toList + "\n" + par
+        state.output.message("Evaluating " + info)
+        
+        val sc = 
+          try {
+            state.output.message("Compiling...")
+            SCBuilder.mkSC(par)
+          } catch {
+            case e:Throwable =>
+              state.output.warning("Error while building a supercompiler:\n" + 
+                  "thread: " + th + "\n" + e + "\n" + info + 
+                  "\n\n" + SCBuilder.scCode(par) + "\n")
+              vec.fitness.asInstanceOf[SimpleFitness].setFitness(state, 0)
+              ind.evaluated = true
+              return 
+          }
+          
+        val fit =
+          try {
+            state.output.message("Evaluating...")
+            evaluateSC(sc, info)
+          } catch {
+            case e:Throwable =>
+              state.output.warning("Error while evaluating a supercompiler:\n" + 
+                  "\n" + e + "\n" + vec.genome.toList + "\n" + par + "\n")
+              throw e
+              List(0)
+          }
+          
+        state.output.message("Evaluated " + vec.genome.toList + ": " + fit.sum + " " + fit)
+        
+        vec.fitness.asInstanceOf[SimpleFitness]
+            .setFitness(state, fit.sum)
+        ind.evaluated = true
+      case _ =>
+        state.output.fatal("Individual must be an int vector")
+    }
+  }
+  
+}
+
+class TestFailedException(s: String) 
+  extends Exception("Test failed on a supercompiled program: " + s)
+
+class EqProvingProblem extends SupercompilationProblem {
+
+  var timeout = 10
+  var testing = true
+  var progs: List[(String, Program, GContext, List[(Term, List[Term], Term)])] = Nil
+  
+  def addFiles(files: List[String]) {
+    progs = progs ++
+      (for(file <- files) yield {
+        val prog = 
+            ProgramParser.parseFile(file)
+              .resolveUnbound.mergeAppsAndLambdas.topLevelEtaExpand.splitTests
+        val gcont = prog.toGContext
+        (file, prog, gcont, makeTests(prog, gcont))
+      })
+  }
+  
+  def makeTests(prog: Program, gcont: GContext): List[(Term, List[Term], Term)] = {
+    for(t <- prog.tests; if testing) yield {
+      val res = CBNEval.eval(t.toTerm(), gcont)
+      t match {
+        case ExprCall(e, es) => 
+          (peelAbs(e.toTerm()), es.map(_.toTerm()), res)
+        case _ => (t.toTerm(), Nil, res)
+      }
+    }
+  }
+  
+  def addFileSet(file: String) {
+    val src = scala.io.Source.fromFile(file)
+    val parent = (new File(file)).getParent()
+    val files =
+      (for(l <- src.getLines; fn = l.trim(); if fn != "")
+        yield parent + "/" + fn).toList
+    src.close()
+    addFiles(files)
+  }
+  
+  override def setup(state: EvolutionState, base: Parameter) {
+    testing = state.parameters.getBoolean(base.push("testing"), null, true)
+    timeout = state.parameters.getIntWithDefault(base.push("timeout"), null, 10)
+    val fileset = state.parameters.getString(base.push("fileset"), null)
+    if(fileset == null)
+      state.output.fatal("EqProverProblem: fileset must be specified")
+    else
+      addFileSet(fileset)
+  }
+
+  override def evaluateSC(sc: PFPSC, info: String): List[Int] = {
+    (for((file, prog, gcont, tests) <- progs) yield {
+      
+      def runTests(t_unpeeled: Term): Term => Term = {
+        if(testing) {
+          val big_number = 1000
+          val t_peeled = peelAbs(t_unpeeled, big_number)
+          val ts =
+            for((t, as, res) <- tests; sub <- NamelessSyntax.findSubst(t_peeled, t)) yield
+              (sub, as, res)
+          if(ts.isEmpty) {
+              //System.err.println("No tests found for " + t_peeled)
+              (x => x)
+          } else {
+            x =>
+              for((sub,as,res) <- ts) {
+                val fullsub = 
+                  sub.mapValues {
+                    case FVar(v, _) => as(v)
+                    case o => o
+                  }
+                val term = NamelessSyntax.applySubst(peelAbs(x, big_number), fullsub)
+                if(res != CBNEval.eval(term, gcont))
+                  throw new TestFailedException("\n" + term)
+              }
+              x
+          }
+        }
+        else
+          (x => x)
+      }
+      
+      for(p <- prog.prove) yield p match {
+        case PropEq(e1, e2) =>
+          val t1 = e1.bindUnbound.toTerm()
+          val t2 = e2.bindUnbound.toTerm()
+          
+          println("running " + file + " : " + p)
+          
+          val gg1 = GraphGenerator(sc(gcont), t1).map(residualize).map(runTests(t1))
+          val gg2 = GraphGenerator(sc(gcont), t2).map(residualize).map(runTests(t2))
+          
+          try {
+            withTimeout(findEqual(gg1, gg2), timeout) match {
+              case None => 0
+              case Some(t) => 1
+            }
+          } catch {
+            case e:TestFailedException =>
+              System.err.println(e)
+              System.err.println(info)
+              System.err.println("While proving " + p + " from " + file)
+              0
+            case e:Throwable =>
+              0
+          }
+        case _ =>
+          //System.err.println("Proposition type is not supported: " + p)
+          0
+      }
+    }).flatten
+  }
+}
+

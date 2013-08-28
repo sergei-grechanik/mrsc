@@ -316,7 +316,7 @@ trait AllRebuildings extends PFPRules with RebuildingsGenerator {
   }
 }
 
-trait LowerRebuildingsOnBinaryWhistle extends AllRebuildings with BinaryWhistle {
+trait LowerRebuildingsOnBinaryWhistle extends AllRebuildings {
   override def rebuild(signal: Signal, g: G) =
     signal match {
       case None    => List()
@@ -324,7 +324,7 @@ trait LowerRebuildingsOnBinaryWhistle extends AllRebuildings with BinaryWhistle 
     }
 }
 
-trait LowerAllBinaryGensOnBinaryWhistle extends PFPRules with MutualGens with BinaryWhistle {
+trait LowerAllBinaryGensOnBinaryWhistle extends PFPRules with MutualGens {
   override def rebuild(signal: Signal, g: G): List[S] =
     signal match {
       case None => List()
@@ -333,7 +333,7 @@ trait LowerAllBinaryGensOnBinaryWhistle extends PFPRules with MutualGens with Bi
     }
 }
 
-trait UpperRebuildingsOnBinaryWhistle extends PFPRules with RebuildingsGenerator with BinaryWhistle {
+trait UpperRebuildingsOnBinaryWhistle extends PFPRules with RebuildingsGenerator {
   override def rebuild(signal: Signal, g: G) =
     signal match {
       case None        => List()
@@ -341,7 +341,7 @@ trait UpperRebuildingsOnBinaryWhistle extends PFPRules with RebuildingsGenerator
     }
 }
 
-trait DoubleRebuildingsOnBinaryWhistle extends PFPRules with RebuildingsGenerator with BinaryWhistle {
+trait DoubleRebuildingsOnBinaryWhistle extends PFPRules with RebuildingsGenerator {
   override def rebuild(signal: Option[N], g: G) =
     signal match {
       case None =>
@@ -355,7 +355,7 @@ trait DoubleRebuildingsOnBinaryWhistle extends PFPRules with RebuildingsGenerato
     }
 }
 
-trait UpperAllBinaryGensOnBinaryWhistle extends PFPRules with MutualGens with BinaryWhistle {
+trait UpperAllBinaryGensOnBinaryWhistle extends PFPRules with MutualGens {
   override def rebuild(signal: Signal, g: G): List[S] =
     signal match {
       case None => List()
@@ -370,7 +370,7 @@ trait UpperAllBinaryGensOnBinaryWhistle extends PFPRules with MutualGens with Bi
     }
 }
 
-trait DoubleAllBinaryGensOnBinaryWhistle extends PFPRules with MutualGens with BinaryWhistle {
+trait DoubleAllBinaryGensOnBinaryWhistle extends PFPRules with MutualGens {
   override def rebuild(signal: Signal, g: G) = signal match {
     case None =>
       List()
@@ -383,7 +383,7 @@ trait DoubleAllBinaryGensOnBinaryWhistle extends PFPRules with MutualGens with B
   }
 }
 
-trait LowerAllBinaryGensOrDriveOnBinaryWhistle extends PFPRules with MutualGens with BinaryWhistle {
+trait LowerAllBinaryGensOrDriveOnBinaryWhistle extends PFPRules with MutualGens {
   override def rebuild(signal: Signal, g: G): List[S] =
     signal match {
       case None => List()
@@ -397,7 +397,7 @@ trait LowerAllBinaryGensOrDriveOnBinaryWhistle extends PFPRules with MutualGens 
     }
 }
 
-trait UpperAllBinaryGensOrDriveOnBinaryWhistle extends PFPRules with MutualGens with BinaryWhistle {
+trait UpperAllBinaryGensOrDriveOnBinaryWhistle extends PFPRules with MutualGens {
   override def rebuild(signal: Signal, g: G): List[S] =
     signal match {
       case None => List()
@@ -417,7 +417,7 @@ trait UpperAllBinaryGensOrDriveOnBinaryWhistle extends PFPRules with MutualGens 
     }
 }
 
-trait UpperMsgOnBinaryWhistle extends PFPRules with MSGRebuildings with BinaryWhistle {
+trait UpperMsgOnBinaryWhistle extends PFPRules with MSGRebuildings {
 
   override def rebuild(signal: Signal, g: G): List[S] = {
     signal match {
@@ -436,7 +436,7 @@ trait UpperMsgOnBinaryWhistle extends PFPRules with MSGRebuildings with BinaryWh
   }
 }
 
-trait UpperMsgOrLowerMggOnBinaryWhistle extends PFPRules with MSGRebuildings with BinaryWhistle {
+trait UpperMsgOrLowerMggOnBinaryWhistle extends PFPRules with MSGRebuildings {
   override def rebuild(signal: Signal, g: G): List[S] = {
     signal match {
       case Some(upper) =>
@@ -456,7 +456,7 @@ trait UpperMsgOrLowerMggOnBinaryWhistle extends PFPRules with MSGRebuildings wit
   }
 }
 
-trait LowerMsgOrUpperMggOnBinaryWhistle extends PFPRules with MSGRebuildings with BinaryWhistle {
+trait LowerMsgOrUpperMggOnBinaryWhistle extends PFPRules with MSGRebuildings {
   import NamelessSyntax._
   override def rebuild(signal: Signal, g: G): List[S] = {
     signal match {
@@ -477,7 +477,7 @@ trait LowerMsgOrUpperMggOnBinaryWhistle extends PFPRules with MSGRebuildings wit
   }
 }
 
-trait LowerMsgOrDrivingOnBinaryWhistle extends PFPRules with MSGRebuildings with BinaryWhistle {
+trait LowerMsgOrDrivingOnBinaryWhistle extends PFPRules with MSGRebuildings {
 
   override def rebuild(signal: Signal, g: G) = signal match {
     case Some(upper) =>
@@ -492,7 +492,7 @@ trait LowerMsgOrDrivingOnBinaryWhistle extends PFPRules with MSGRebuildings with
   }
 }
 
-trait LowerMsgOrUpperMsgOnBinaryWhistle extends PFPRules with MSGRebuildings with BinaryWhistle {
+trait LowerMsgOrUpperMsgOnBinaryWhistle extends PFPRules with MSGRebuildings {
 
   override def rebuild(signal: Signal, g: G) = signal match {
     case Some(upper) =>
@@ -514,7 +514,7 @@ trait LowerMsgOrUpperMsgOnBinaryWhistle extends PFPRules with MSGRebuildings wit
   }
 }
 
-trait UpperMsgOrLowerMsgOnBinaryWhistle extends PFPRules with MSGRebuildings with BinaryWhistle {
+trait UpperMsgOrLowerMsgOnBinaryWhistle extends PFPRules with MSGRebuildings {
 
   override def rebuild(signal: Signal, g: G) = signal match {
     case Some(upper) =>
@@ -536,7 +536,7 @@ trait UpperMsgOrLowerMsgOnBinaryWhistle extends PFPRules with MSGRebuildings wit
   }
 }
 
-trait DoubleMsgOnBinaryWhistle extends PFPRules with MSGRebuildings with BinaryWhistle {
+trait DoubleMsgOnBinaryWhistle extends PFPRules with MSGRebuildings {
 
   def rebuild(signal: Signal, g: G) = signal match {
     case Some(upper) =>
@@ -564,7 +564,7 @@ trait MSGRebuildings extends MSG with RebuildingsGenerator {
   }
 }
 
-trait FoldingOnBinaryWhistle extends PFPRules with BinaryWhistle {
+trait FoldingOnBinaryWhistle extends PFPRules {
   override def fold(signal: Signal, g: G): List[S] =
     signal.map(n => FoldStep(n.sPath): S).toList
 

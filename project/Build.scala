@@ -19,6 +19,7 @@ object MRSCBuild extends Build {
       libraryDependencies += "org.scalatest" %% "scalatest" % "1.9.1" % "test",
       libraryDependencies += "org.rogach" %% "scallop" % "0.9.2",
       libraryDependencies += "com.twitter" %% "util-eval" % "6.3.6",
+      libraryDependencies += "edu.gmu.cs" % "ecj" % "20.0",
       startScriptName <<= target / "mrsc-cli",
       unmanagedBase := file("lib"),
       fork := true,

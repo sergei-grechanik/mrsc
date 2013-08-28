@@ -29,7 +29,7 @@ case class GraphGenerator[C, D](rules: GraphRewriteRules[C, D], conf: C, withHis
   }
 
   private def normalize(): Unit =
-    while (completeGs.isEmpty && !pendingGs.isEmpty) {
+    while (completeGs.isEmpty && !pendingGs.isEmpty && !Thread.interrupted) {
       val pendingDelta = ListBuffer[SGraph[C, D]]()
       val g = pendingGs.head
       val rewrittenGs = rules.steps(g) map { GraphGenerator.executeStep(_, g, withHistory) }
