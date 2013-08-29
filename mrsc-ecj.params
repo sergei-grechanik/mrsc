@@ -1,21 +1,22 @@
-breedthreads = 4
-evalthreads = 4
+breedthreads = 3
+evalthreads = 3
 seed.0 = time
 seed.1 = time
 seed.2 = time
 seed.3 = time
+seed.4 = time
 
 state = ec.simple.SimpleEvolutionState
 
 pop = ec.Population
 init = ec.simple.SimpleInitializer
 finish = ec.simple.SimpleFinisher
-breed = ec.simple.SimpleBreeder
-eval = ec.simple.SimpleEvaluator
+breed = ec.multiobjective.nsga2.NSGA2Breeder
+eval = ec.multiobjective.nsga2.NSGA2Evaluator
 stat = ec.simple.SimpleStatistics
 exch = ec.simple.SimpleExchanger
 
-generations = 100
+generations = 30
 quit-on-run-complete = true
 checkpoint = false
 prefix = myprefix
@@ -23,11 +24,13 @@ checkpoint-prefix = myprefix
 checkpoint-modulo = 1
 
 stat.file = $out.stat
+stat.do-description = true
+stat.do-per-generation-description = true
 
 pop.subpops = 1
 pop.subpop.0 = ec.Subpopulation
 
-pop.subpop.0.size = 20
+pop.subpop.0.size = 30
 pop.subpop.0.duplicate-retries 	= 0
 pop.subpop.0.species = ec.vector.IntegerVectorSpecies
 
@@ -37,6 +40,29 @@ pop.subpop.0.species.max-gene = 1000
 pop.subpop.0.species.crossover-type = one
 pop.subpop.0.species.crossover-prob = 1.0
 pop.subpop.0.species.mutation-prob = 0.01
+pop.subpop.0.species.mutation-type = integer-reset
+
+pop.subpop.0.species.fitness = ec.multiobjective.nsga2.NSGA2MultiObjectiveFitness
+pop.subpop.0.species.fitness.maximize = false
+pop.subpop.0.species.fitness.min = 0.0
+pop.subpop.0.species.fitness.max = 99999.0
+
+stat = ec.multiobjective.MultiObjectiveStatistics
+stat.front = $front.stat
+
+pop.subpop.0.species.pipe = ec.vector.breed.VectorMutationPipeline
+pop.subpop.0.species.pipe.source.0 = ec.vector.breed.VectorCrossoverPipeline
+pop.subpop.0.species.pipe.source.0.source.0 = ec.select.TournamentSelection
+pop.subpop.0.species.pipe.source.0.source.1 = ec.select.TournamentSelection
+
+select.tournament.size = 2
+
+eval.problem = mrsc.frontend.EqProvingProblem
+eval.problem.testing = true
+eval.problem.timeout = 2
+
+eval.problem.fileset = ../graphsc/samples/alpha.set
+pop.subpop.0.species.fitness.num-objectives = 19
 
 # This part is actually generated
 pop.subpop.0.species.genome-size = 4
@@ -48,18 +74,4 @@ pop.subpop.0.species.min-gene.2 = 0
 pop.subpop.0.species.max-gene.2 = 16
 pop.subpop.0.species.min-gene.3 = 0
 pop.subpop.0.species.max-gene.3 = 2
-
-pop.subpop.0.species.fitness = ec.simple.SimpleFitness
-
-pop.subpop.0.species.pipe = ec.vector.breed.VectorMutationPipeline
-pop.subpop.0.species.pipe.source.0 = ec.vector.breed.VectorCrossoverPipeline
-pop.subpop.0.species.pipe.source.0.source.0 = ec.select.TournamentSelection
-pop.subpop.0.species.pipe.source.0.source.1 = ec.select.TournamentSelection
-
-select.tournament.size = 2
-
-eval.problem = mrsc.frontend.EqProvingProblem
-eval.problem.testing = true
-eval.problem.timeout = 1
-eval.problem.fileset = ../graphsc/samples/alpha.set
 

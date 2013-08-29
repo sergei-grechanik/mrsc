@@ -2,15 +2,14 @@ package mrsc.frontend
 
 import mrsc.core._
 import mrsc.pfp._
-
 import scala.collection.immutable.TreeMap
 import com.twitter.util.Eval
 import java.io.File
-
 import ec._
 import ec.simple._
 import ec.util._
 import ec.vector._
+import ec.multiobjective.MultiObjectiveFitness
 
 sealed trait Param {
   def size: Int = this match {
@@ -125,7 +124,7 @@ object SCBuilder {
 
 trait SupercompilationProblem extends Problem with SimpleProblemForm {
   
-  def evaluateSC(sc: PFPSC, info: String): List[Int]
+  def evaluateSC(sc: PFPSC, info: String): List[Float]
   
   def vec2par(state: EvolutionState, vec: IntegerVectorIndividual): Param = {
     try {
@@ -161,6 +160,8 @@ trait SupercompilationProblem extends Problem with SimpleProblemForm {
     if(ind.evaluated) return
     ind match {
       case vec: IntegerVectorIndividual =>
+        val fitness = vec.fitness.asInstanceOf[MultiObjectiveFitness]
+        
         val par = vec2par(state, vec)
           
         val info = vec.genome.toList + "\n" + par
@@ -175,9 +176,7 @@ trait SupercompilationProblem extends Problem with SimpleProblemForm {
               state.output.warning("Error while building a supercompiler:\n" + 
                   "thread: " + th + "\n" + e + "\n" + info + 
                   "\n\n" + SCBuilder.scCode(par) + "\n")
-              vec.fitness.asInstanceOf[SimpleFitness].setFitness(state, 0)
-              ind.evaluated = true
-              return 
+              null
           }
           
         val fit =
@@ -188,14 +187,24 @@ trait SupercompilationProblem extends Problem with SimpleProblemForm {
             case e:Throwable =>
               state.output.warning("Error while evaluating a supercompiler:\n" + 
                   "\n" + e + "\n" + vec.genome.toList + "\n" + par + "\n")
-              throw e
-              List(0)
+              null
           }
-          
-        state.output.message("Evaluated " + vec.genome.toList + ": " + fit.sum + " " + fit)
         
-        vec.fitness.asInstanceOf[SimpleFitness]
-            .setFitness(state, fit.sum)
+        val goodfits = fit.filter(_ < 100)
+          
+        state.output.message("Evaluated " + vec.genome.toList + ": " + 
+            goodfits.size + " " + goodfits.sum + " " + fit)
+          
+        vec.fitness match {
+          case fitness: MultiObjectiveFitness =>
+            // minimize the number of residuations spent on each problem
+            if(fit == null) fitness.setObjectives(state, fitness.maxObjective)
+            else fitness.setObjectives(state, fit.toArray)
+          case fitness: SimpleFitness =>
+            // maximize the number of solved problems
+            fitness.setFitness(state, goodfits.size.toFloat - goodfits.sum/goodfits.size/100)
+        }
+        
         ind.evaluated = true
       case _ =>
         state.output.fatal("Individual must be an int vector")
@@ -209,6 +218,7 @@ class TestFailedException(s: String)
 
 class EqProvingProblem extends SupercompilationProblem {
 
+  var maxfit: Float = 99999.0f
   var timeout = 10
   var testing = true
   var progs: List[(String, Program, GContext, List[(Term, List[Term], Term)])] = Nil
@@ -255,7 +265,7 @@ class EqProvingProblem extends SupercompilationProblem {
       addFileSet(fileset)
   }
 
-  override def evaluateSC(sc: PFPSC, info: String): List[Int] = {
+  override def evaluateSC(sc: PFPSC, info: String): List[Float] = {
     (for((file, prog, gcont, tests) <- progs) yield {
       
       def runTests(t_unpeeled: Term): Term => Term = {
@@ -292,28 +302,28 @@ class EqProvingProblem extends SupercompilationProblem {
           val t1 = e1.bindUnbound.toTerm()
           val t2 = e2.bindUnbound.toTerm()
           
-          println("running " + file + " : " + p)
+          System.err.println("running " + file + " : " + p)
           
           val gg1 = GraphGenerator(sc(gcont), t1).map(residualize).map(runTests(t1))
           val gg2 = GraphGenerator(sc(gcont), t2).map(residualize).map(runTests(t2))
           
           try {
             withTimeout(findEqual(gg1, gg2), timeout) match {
-              case None => 0
-              case Some(t) => 1
+              case None => 1111f // better than exit on timeout
+              case Some(t) => t._2
             }
           } catch {
             case e:TestFailedException =>
               System.err.println(e)
               System.err.println(info)
               System.err.println("While proving " + p + " from " + file)
-              0
+              3333f // test failure is very bad
             case e:Throwable =>
-              0
+              2222f // timeout is bad
           }
         case _ =>
           //System.err.println("Proposition type is not supported: " + p)
-          0
+          1000f
       }
     }).flatten
   }

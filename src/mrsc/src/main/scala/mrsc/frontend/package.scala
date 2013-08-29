@@ -14,20 +14,23 @@ package object frontend {
     case _ => t
   }
   
-  def findEqual(i1: Iterator[Term], i2: Iterator[Term], grsize: Int = 10): Option[Term] = {
+  def findEqual(i1: Iterator[Term], i2: Iterator[Term], grsize: Int = 10): Option[(Term, Int)] = {
     val set1 = collection.mutable.Set[Term]()
     val set2 = collection.mutable.Set[Term]()
     
     val j1 = i1.grouped(grsize)
     val j2 = i2.grouped(grsize)
     
+    var count = 0
+    
     def go(j: Iterator[Seq[Term]], 
            myset: collection.mutable.Set[Term], 
-           oset: collection.mutable.Set[Term]): Option[Term] = {
+           oset: collection.mutable.Set[Term]): Option[(Term, Int)] = {
       if(j.hasNext && !Thread.interrupted) {
         val n = j.next
         for(t <- n) {
-          if(oset.contains(t)) return Some(t)
+          count += 1
+          if(oset.contains(t)) return Some((t, count))
         }
         myset ++= n
       }
