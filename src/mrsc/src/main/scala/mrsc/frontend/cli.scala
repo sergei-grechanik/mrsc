@@ -32,7 +32,10 @@ object CLI {
     val whistle = opt[String](default = Some("HE3ByCouplingWhistle"), descr = "Whistle")
     val rebuild = opt[String](default = Some("UpperMsgOrLowerMsgOnBinaryWhistle"), 
         descr = "Rebuildings")
+    val gen = opt[List[Int]](descr = "Genome")
     
+    val timeout = opt[Int](default = Some(0), descr = "Timeout")
+        
     val verbose = opt[Boolean](descr = "Be more verbose")
     
     val file = trailArg[List[String]](required = true)
@@ -125,88 +128,21 @@ object CLI {
     }
     else {
       val conf = new Conf(args)
-      val sc = mkSupercompiler(conf)
-      runSC(conf)(sc) 
+      val problem = new EqProvingProblem
+      problem.timeout = conf.timeout()
+      problem.addFiles(conf.file())
+      val sc =
+        if(conf.gen.isSupplied) {
+          val p = SCBuilder.SCParamDescr.ints2param(conf.gen())
+          System.err.println(p)
+          SCBuilder.mkSC(p)
+        }
+        else 
+          mkSupercompiler(conf)
+      val fit = problem.evaluateSC(sc, "sc")
+      val goodfits = fit.filter(_ < 100)
+      System.err.println("Evaluated: " + 
+          goodfits.size + " " + goodfits.sum + " " + fit)
     }
-  }
-  
-  def runSC(conf: Conf): PFPSC => List[Int] = {
-    val funs: List[PFPSC => List[Int]] =
-      for(file <- conf.file()) yield {
-        val prog = 
-          ProgramParser.parseFile(file)
-            .resolveUnbound.mergeAppsAndLambdas.topLevelEtaExpand.splitTests
-        val gcont = prog.toGContext
-        
-        val tests =
-          for(t <- prog.tests; if(conf.test())) yield {
-            if(conf.verbose())
-              System.err.println("Running test: " + t)
-            val res = CBNEval.eval(t.toTerm(), gcont)
-            if(conf.verbose())
-              System.err.println("Result: " + res)
-            t match {
-              case ExprCall(e, es) => 
-                (peelAbs(e.toTerm()), es.map(_.toTerm()), res)
-              case _ => (t.toTerm(), Nil, res)
-            }
-          }
-        
-        def runTests(t_unpeeled: Term): Term => Term = {
-          if(conf.test()){
-            val big_number = 1000
-            val t_peeled = peelAbs(t_unpeeled, big_number)
-            val ts =
-              for((t, as, res) <- tests; sub <- NamelessSyntax.findSubst(t_peeled, t)) yield
-                (sub, as, res)
-            if(ts.isEmpty) {
-                System.err.println("No tests found for " + t_peeled)
-                (x => x)
-            } else {
-              x =>
-                for((sub,as,res) <- ts) {
-                  val fullsub = 
-                    sub.mapValues {
-                      case FVar(v, _) => as(v)
-                      case o => o
-                    }
-                  val term = NamelessSyntax.applySubst(peelAbs(x, big_number), fullsub)
-                  assert(res == CBNEval.eval(term, gcont))
-                }
-                x
-            }
-          }
-          else
-            (x => x)
-        }
-        
-        if(conf.prove()) { (sc:PFPSC) =>
-          for(p <- prog.prove) yield p match {
-            case PropEq(e1, e2) =>
-              val t1 = e1.bindUnbound.toTerm()
-              val t2 = e2.bindUnbound.toTerm()
-              
-              findEqual(
-                  GraphGenerator(sc(gcont), t1).map(residualize).map(runTests(t1)), 
-                  GraphGenerator(sc(gcont), t2).map(residualize).map(runTests(t2))) match {
-                case None => 
-                  if(conf.verbose())
-                    System.err.println("Cannot prove the proposition: " + p)
-                  0
-                case Some(t) =>
-                  if(conf.verbose())
-                    System.err.println("Proposition successfully proved: " + p)
-                  1
-              }
-            case _ =>
-              System.err.println("Proposition type is not supported: " + p)
-              0
-          }
-        }
-        else
-          ((sc:PFPSC) => List(0))
-      }
-    
-    (sc => funs.flatMap(f => f(sc)))
   }
 }

@@ -175,7 +175,7 @@ sealed trait Expr {
     case ExprCaseOf(expr, cases) => 
       Case(expr.toTerm(map), 
           cases.map{ case (c, vs, b) => 
-            (Ptr(c, vs), b.toTerm(map.mapValues(_ + vs.size) ++ vs.zipWithIndex)) })
+            (Ptr(c, vs), b.toTerm(map.mapValues(_ + vs.size) ++ vs.reverse.zipWithIndex)) })
     case ExprLet(expr, binds) =>
       ExprCall(ExprLambda(binds.map(_._1), expr), binds.map(_._2)).toTerm(map)
   }

@@ -10,6 +10,7 @@ import ec.simple._
 import ec.util._
 import ec.vector._
 import ec.multiobjective.MultiObjectiveFitness
+import java.util.concurrent.TimeoutException
 
 sealed trait Param {
   def size: Int = this match {
@@ -150,7 +151,7 @@ trait SupercompilationProblem extends Problem with SimpleProblemForm {
       case vec: IntegerVectorIndividual =>
         val par = vec2par(state, vec)
         state.output.log(log).writer.println(
-            "Description of " + vec.genome.toList + ":\n" + par)
+            "Description of " + vec.genome.toList.mkString(" ") + ":\n" + par)
       case _ =>
         state.output.fatal("Individual must be an int vector")
     }
@@ -164,7 +165,7 @@ trait SupercompilationProblem extends Problem with SimpleProblemForm {
         
         val par = vec2par(state, vec)
           
-        val info = vec.genome.toList + "\n" + par
+        val info = vec.genome.toList.mkString(" ") + "\n" + par
         state.output.message("Evaluating " + info)
         
         val sc = 
@@ -186,13 +187,13 @@ trait SupercompilationProblem extends Problem with SimpleProblemForm {
           } catch {
             case e:Throwable =>
               state.output.warning("Error while evaluating a supercompiler:\n" + 
-                  "\n" + e + "\n" + vec.genome.toList + "\n" + par + "\n")
+                  "\n" + e + "\n" + vec.genome.mkString(" ") + "\n" + par + "\n")
               null
           }
         
         val goodfits = fit.filter(_ < 100)
           
-        state.output.message("Evaluated " + vec.genome.toList + ": " + 
+        state.output.message("Evaluated " + vec.genome.mkString(" ") + ": " + 
             goodfits.size + " " + goodfits.sum + " " + fit)
           
         vec.fitness match {
@@ -239,7 +240,7 @@ class EqProvingProblem extends SupercompilationProblem {
       val res = CBNEval.eval(t.toTerm(), gcont)
       t match {
         case ExprCall(e, es) => 
-          (peelAbs(e.toTerm()), es.map(_.toTerm()), res)
+          (peelAbs(e.toTerm())._1, es.map(_.toTerm()), res)
         case _ => (t.toTerm(), Nil, res)
       }
     }
@@ -270,25 +271,39 @@ class EqProvingProblem extends SupercompilationProblem {
       
       def runTests(t_unpeeled: Term): Term => Term = {
         if(testing) {
-          val big_number = 1000
-          val t_peeled = peelAbs(t_unpeeled, big_number)
+          val (t_peeled, peeled_abs) = peelAbs(t_unpeeled)
           val ts =
-            for((t, as, res) <- tests; sub <- NamelessSyntax.findSubst(t_peeled, t)) yield
+            for((t, as, res) <- tests; sub <- NamelessSyntax.findSubst(t_peeled, t)) yield {
+//              println("tested: " + NamedSyntax.named(t))
+//              println("args: " + as.map(NamedSyntax.named(_)))
+//              println("t_peeled: " + NamedSyntax.named(t_peeled))
+//              println("sub: " + sub)
               (sub, as, res)
+            }
           if(ts.isEmpty) {
               //System.err.println("No tests found for " + t_peeled)
               (x => x)
           } else {
             x =>
               for((sub,as,res) <- ts) {
+//                println("args: " + as.map(NamedSyntax.named(_)))
+//                println("t_peeled: " + NamedSyntax.named(t_peeled))
+//                println("x: " + NamedSyntax.named(x))
+//                println("sub: " + sub)
+                val varsub = as.zipWithIndex.map { case (a,i) => FVar(i) -> a }.toMap
                 val fullsub = 
-                  sub.mapValues {
-                    case FVar(v, _) => as(v)
-                    case o => o
-                  }
-                val term = NamelessSyntax.applySubst(peelAbs(x, big_number), fullsub)
-                if(res != CBNEval.eval(term, gcont))
-                  throw new TestFailedException("\n" + term)
+                  sub.mapValues (v => NamelessSyntax.applySubst(v, varsub))
+//                println("fullsub: " + fullsub)
+                val term =
+                  (x /: (0 until peeled_abs))(
+                      (a,i) => App(a, fullsub.getOrElse(FVar(i), as(i))))
+//                println("term: " + NamedSyntax.named(term))
+                val newres = CBNEval.eval(term, gcont)
+                if(res != newres)
+                  throw new TestFailedException("\n" + 
+                      NamedSyntax.named(term) + "\n" + 
+                      "should be: " + NamedSyntax.named(res) + "\n" +
+                      "evalated:  " + NamedSyntax.named(newres))
               }
               x
           }
@@ -297,33 +312,43 @@ class EqProvingProblem extends SupercompilationProblem {
           (x => x)
       }
       
-      for(p <- prog.prove) yield p match {
-        case PropEq(e1, e2) =>
-          val t1 = e1.bindUnbound.toTerm()
-          val t2 = e2.bindUnbound.toTerm()
-          
+      for(p <- prog.prove) yield {
+        try {
           System.err.println("running " + file + " : " + p)
-          
-          val gg1 = GraphGenerator(sc(gcont), t1).map(residualize).map(runTests(t1))
-          val gg2 = GraphGenerator(sc(gcont), t2).map(residualize).map(runTests(t2))
-          
-          try {
-            withTimeout(findEqual(gg1, gg2), timeout) match {
-              case None => 1111f // better than exit on timeout
-              case Some(t) => t._2
-            }
-          } catch {
-            case e:TestFailedException =>
-              System.err.println(e)
-              System.err.println(info)
-              System.err.println("While proving " + p + " from " + file)
-              3333f // test failure is very bad
-            case e:Throwable =>
-              2222f // timeout is bad
+          p match {
+            case PropEq(e1, e2) =>
+              val t1 = e1.bindUnbound.toTerm()
+              val t2 = e2.bindUnbound.toTerm()
+              
+              val gg1 = GraphGenerator(sc(gcont), t1).map(residualize).map(runTests(t1))
+              val gg2 = GraphGenerator(sc(gcont), t2).map(residualize).map(runTests(t2))
+              
+              withTimeout(findEqual(gg1, gg2), timeout) match {
+                case None => 1111f // better than exit on timeout
+                case Some(t) => t._2
+              }
+            case PropReturnsConstr(e1, ctr) =>
+              val t1 = e1.bindUnbound.toTerm()
+              val gg1 = GraphGenerator(sc(gcont), t1).map(residualize).map(runTests(t1))
+              
+              withTimeout(findReturning(gg1, ctr), timeout) match {
+                case None => 1111f // better than exit on timeout
+                case Some(t) => t._2
+              }
+            case _ =>
+              System.err.println("Proposition type is not supported: " + p)
+              1000f
           }
-        case _ =>
-          //System.err.println("Proposition type is not supported: " + p)
-          1000f
+        } catch {
+          case e:TimeoutException =>
+            System.err.println("Timeout")
+            2222f
+          case e:Throwable =>
+            System.err.println(e)
+            System.err.println(info)
+            System.err.println("While proving " + p + " from " + file)
+            0 // This is a bug and we like bugs!
+        }
       }
     }).flatten
   }

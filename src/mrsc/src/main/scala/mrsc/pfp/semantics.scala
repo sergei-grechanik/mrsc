@@ -92,7 +92,7 @@ case class FreezeRebuildingMStep(t: Rebuilding) extends MStep {
   val vals = parts.map { _._2 }
   val fvs = parts.map { _._1 }
   val compose = { (args: List[Term]) =>
-    (fvs zip args.tail).foldLeft(args.head){(acc, p) => Let(p._2, applySubst(acc, Map(p._1 -> BVar(0))))}
+    (fvs zip args.tail).foldLeft(args.head){(acc, p) => Let(p._2, applySubst(termShift(1, acc), Map(p._1 -> BVar(0))))}
   }
   val graphStep = AddChildNodesStep[MetaTerm, Label]((t.t :: vals) map { (_, DecomposeLabel(compose)) })
 }
