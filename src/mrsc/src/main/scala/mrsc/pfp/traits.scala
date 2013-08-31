@@ -428,7 +428,8 @@ trait UpperMsgOnBinaryWhistle extends PFPRules with MSGRebuildings {
           case Some(rb) =>
             List(RollbackStep(upper.sPath, rb): S)
           case None =>
-            throw new Exception("Cannot msg " + upperConf + " and " + currentConf)
+            List()
+            //throw new Exception("Cannot msg " + upperConf + " and " + currentConf)
         }
       case None =>
         List()
@@ -506,7 +507,8 @@ trait LowerMsgOrUpperMsgOnBinaryWhistle extends PFPRules with MSGRebuildings {
             case Some(rb) =>
               List(RollbackStep(upper.sPath, rb): S)
             case None =>
-              throw new Exception("Cannot msg " + upperConf + " and " + lowerConf)
+              List()
+              //throw new Exception("Cannot msg " + upperConf + " and " + lowerConf)
           }
       }
     case None =>
@@ -528,7 +530,8 @@ trait UpperMsgOrLowerMsgOnBinaryWhistle extends PFPRules with MSGRebuildings {
             case Some(rb) =>
               List(RebuildStep(rb))
             case None =>
-              throw new Exception("Cannot msg " + upperConf + " and " + lowerConf)
+              List()
+              //throw new Exception("Cannot msg " + upperConf + " and " + lowerConf)
           }
       }
     case None =>

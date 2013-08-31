@@ -15,6 +15,9 @@ trait MSG extends VarGen {
   
   def strictTermMSG(term1: Term, term2: Term): Option[Rebuilding] =
     termMSG(term1, term2) filter {rb => subclass.lt(term1, rb.t)}
+  
+  def nonStrictTermMSG(term1: Term, term2: Term): Option[Rebuilding] =
+    termMSG(term1, term2)
 
   private def generalize(e1: Term, e2: Term): Option[TMSG] = ((e1, e2) match {
 
