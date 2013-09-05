@@ -97,7 +97,7 @@ trait ControlEmbeddingCandidates extends EmbeddingCandidates {
       n.ancestors takeWhile { !isGlobal(_) } filter { !trivial(_) }
     }
 
-  private def isGlobal(n: N): Boolean = n.conf match {
+  def isGlobal(n: N): Boolean = n.conf match {
     case t: Rebuilding => false
     case t: Term =>
       Decomposition.decompose(t) match {
@@ -106,7 +106,7 @@ trait ControlEmbeddingCandidates extends EmbeddingCandidates {
       }
   }
 
-  private def trivial(n: N): Boolean = n.conf match {
+  def trivial(n: N): Boolean = n.conf match {
     case t: Rebuilding => true
     case t: Term =>
       Decomposition.decompose(t) match {

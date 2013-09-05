@@ -32,45 +32,50 @@ case class DecomposeLabel(compose: List[Term] => Term) extends Label {
 // information propagation.
 sealed trait MStep {
   val graphStep: GraphRewriteStep[MetaTerm, Label]
+  val isDefining = false
 }
 // Reduction
 case class TransientMStep(next: MetaTerm) extends MStep {
-  val graphStep = AddChildNodesStep[MetaTerm, Label](List((next, TransientLabel)))
+  val graphStep = AddChildNodesStep[MetaTerm, Label](List((next, TransientLabel)), this)
 }
 // Reduction via unfolding of a function definition
 case class UnfoldMStep(next: MetaTerm) extends MStep {
-  val graphStep = AddChildNodesStep[MetaTerm, Label](List((next, UnfoldLabel)))
+  val graphStep = AddChildNodesStep[MetaTerm, Label](List((next, UnfoldLabel)), this)
 }
 // Rebuilding (generalization)
 case class RebuildMStep(rb: Rebuilding) extends MStep {
-  val graphStep = RebuildStep[MetaTerm, Label](rb)
+  val graphStep = RebuildStep[MetaTerm, Label](rb, this)
 }
 // Stop - no more reductions (variable, nullary constructors)
 case object StopMStep extends MStep {
-  val graphStep = CompleteCurrentNodeStep[MetaTerm, Label]()
+  val graphStep = CompleteCurrentNodeStep[MetaTerm, Label](this)
 }
 // Drilling into arguments of constructor.
 case class DecomposeCtrMStep(ctr: Ctr) extends MStep {
   val compose = (args: List[Term]) => Ctr(ctr.name, args)
-  val graphStep = AddChildNodesStep[MetaTerm, Label](ctr.args map { (_, DecomposeLabel(compose)) })
+  val graphStep = AddChildNodesStep[MetaTerm, Label](ctr.args map { (_, DecomposeLabel(compose)) }, this)
+  override val isDefining = true
 }
 // Drilling into body of lambda abstraction.
 case class DecomposeAbsMStep(body: Term, fv: FVar) extends MStep {
   import NamelessSyntax._
   val compose = (ls: List[Term]) => Abs(applySubst(termShift(1, ls.head), Map(fv -> BVar(0))))
-  val graphStep = AddChildNodesStep[MetaTerm, Label](List((body, DecomposeLabel(compose))))
+  val graphStep = AddChildNodesStep[MetaTerm, Label](List((body, DecomposeLabel(compose))), this)
+  override val isDefining = true
 }
 // Application of an unknown function. Drilling into arguments.
 case class DecomposeVarApp(fv: FVar, args: List[Term]) extends MStep {
   val compose = (ls: List[Term]) => ls.reduce(App(_, _))
-  val graphStep = AddChildNodesStep[MetaTerm, Label]((fv :: args) map { (_, DecomposeLabel(compose)) })
+  val graphStep = AddChildNodesStep[MetaTerm, Label]((fv :: args) map { (_, DecomposeLabel(compose)) }, this)
+  override val isDefining = true
 }
 // Pattern matching.
 case class VariantsMStep(sel: FVar, cases: List[(Ptr, Ctr, Term)]) extends MStep {
   val graphStep = {
     val ns = cases map { v => (v._3, CaseBranchLabel(sel, v._1, v._2)) }
-    AddChildNodesStep[MetaTerm, Label](ns)
+    AddChildNodesStep[MetaTerm, Label](ns, this)
   }
+  override val isDefining = true
 }
 // Drilling into parts of rebuilding.
 case class DecomposeRebuildingMStep(t: Rebuilding) extends MStep {
@@ -82,7 +87,7 @@ case class DecomposeRebuildingMStep(t: Rebuilding) extends MStep {
     val sub1 = Map(fvs zip args.tail: _*)
     applySubst(args.head, sub1)
   }
-  val graphStep = AddChildNodesStep[MetaTerm, Label]((t.t :: vals) map { (_, DecomposeLabel(compose)) })
+  val graphStep = AddChildNodesStep[MetaTerm, Label]((t.t :: vals) map { (_, DecomposeLabel(compose)) }, this)
 }
 // Drilling into parts of rebuilding. But compose function
 // do not perform substitution - it creates let-expression.
@@ -94,7 +99,7 @@ case class FreezeRebuildingMStep(t: Rebuilding) extends MStep {
   val compose = { (args: List[Term]) =>
     (fvs zip args.tail).foldLeft(args.head){(acc, p) => Let(p._2, applySubst(termShift(1, acc), Map(p._1 -> BVar(0))))}
   }
-  val graphStep = AddChildNodesStep[MetaTerm, Label]((t.t :: vals) map { (_, DecomposeLabel(compose)) })
+  val graphStep = AddChildNodesStep[MetaTerm, Label]((t.t :: vals) map { (_, DecomposeLabel(compose)) }, this)
 }
 
 // It is an open question how to get rid off this

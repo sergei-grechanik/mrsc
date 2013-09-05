@@ -2,7 +2,6 @@ package mrsc.frontend
 
 import mrsc.core._
 import mrsc.pfp._
-import scala.collection.immutable.TreeMap
 import com.twitter.util.Eval
 import java.io.File
 import ec._
@@ -16,11 +15,11 @@ sealed trait Param {
   def size: Int = this match {
     case ParamString(_) => 1
     case ParamInt(_) => 1
-    case ParamRecord(fs) => fs.values.map(_.size).sum 
+    case ParamRecord(fs) => fs.map(_._2.size).sum 
   }
   
   def apply(s: String): Param = 
-    this.asInstanceOf[ParamRecord].fields(s)
+    this.asInstanceOf[ParamRecord].fields.find(_._1 == s).get._2
     
   override def toString = this match {
     case ParamString(s) => s
@@ -33,20 +32,24 @@ sealed trait Param {
 
 case class ParamString(str: String) extends Param { override def toString = str }
 case class ParamInt(int: Int) extends Param
-case class ParamRecord(fields: TreeMap[String, Param]) extends Param
+case class ParamRecord(fields: List[(String, Param)]) extends Param
 
 sealed trait ParamDescription {
   def param2ints(p: Param): List[Int] = this match {
     case ParamDescrOneOf(strs) =>
       List(strs.indexOf(p.asInstanceOf[ParamString].str))
+    case ParamDescrInt(_, _) =>
+      List(p.asInstanceOf[ParamInt].int)
     case ParamDescrRecord(fs) =>
       val ParamRecord(fields) = p
-      fs.toList.map(p => (p._1, p._2.param2ints(fields(p._1)))).map(_._2).flatten
+      fs.toList.flatMap(p => p._2.param2ints(fields.find(_._1 == p._1).get._2))
   }
   
   def ints2param(l: List[Int]): Param = this match {
     case ParamDescrOneOf(strs) =>
       ParamString(strs(l(0)))
+    case ParamDescrInt(_, _) =>
+      ParamInt(l(0))
     case ParamDescrRecord(fs) =>
       var curl = l
       val pars =
@@ -55,30 +58,30 @@ sealed trait ParamDescription {
           curl = curl.drop(par.size)
           (s, par)
         }
-      ParamRecord(TreeMap(pars:_*))
+      ParamRecord(pars)
   }
   
   def size: Int = this match {
     case ParamDescrOneOf(_) => 1
     case ParamDescrInt(_, _) => 1
-    case ParamDescrRecord(fs) => fs.values.map(_.size).sum 
+    case ParamDescrRecord(fs) => fs.map(_._2.size).sum 
   }
   
   def bounds: List[(Int, Int)] = this match {
     case ParamDescrOneOf(ss) => List((0, ss.size - 1))
     case ParamDescrInt(mn, mx) => List((mn, mx))
-    case ParamDescrRecord(fs) => fs.values.flatMap(_.bounds).toList
+    case ParamDescrRecord(fs) => fs.flatMap(_._2.bounds).toList
   }
 }
 
 case class ParamDescrOneOf(strs: List[String]) extends ParamDescription
 case class ParamDescrInt(min: Int, max: Int) extends ParamDescription
-case class ParamDescrRecord(fields: TreeMap[String, ParamDescription]) extends ParamDescription
+case class ParamDescrRecord(fields: List[(String, ParamDescription)]) extends ParamDescription
 
 object SCBuilder {
   def oneOf(ss: String*) = ParamDescrOneOf(ss.toList)
   
-  val SCParamDescr = ParamDescrRecord(TreeMap(
+  val SCParamDescr = ParamDescrRecord(List(
       "driving" -> oneOf(
         "PositiveDriving", 
         "Driving",
@@ -107,15 +110,18 @@ object SCBuilder {
         "LowerMsgOrDrivingOnBinaryWhistle",
         "LowerMsgOrUpperMsgOnBinaryWhistle",
         "UpperMsgOrLowerMsgOnBinaryWhistle",
-        "DoubleMsgOnBinaryWhistle")
+        "DoubleMsgOnBinaryWhistle"),
+      "maxdepth" -> ParamDescrInt(1,500)
       ))
       
   def scCode(p: Param): String = {
     val mixins = 
-      List(p("driving"), "AllFoldingCandidates", "Folding", p("ec"), p("whistle"), p("rebuild"))
+      List(p("driving"), "AllFoldingCandidates", "Folding", p("ec"), p("whistle"), p("rebuild"),
+          "DepthGraphFilter")
     """import mrsc.pfp._  
     class SC(val gc: GContext) extends PFPRules with PFPSemantics with """ + 
-    mixins.mkString(" with ") + "\n((g:GContext) => new SC(g))"
+    mixins.mkString(" with ") + " { override val maxDepth = " + p("maxdepth") + " }" + 
+    "\n((g:GContext) => new SC(g))"
   }
       
   def mkSC(p: Param): PFPSC = {
@@ -316,9 +322,13 @@ class EqProvingProblem extends SupercompilationProblem {
         try {
           System.err.println("running " + file + " : " + p)
           p match {
-            case PropEq(e1, e2) =>
+            case PropEq(e1, e2) if false =>
               val t1 = e1.bindUnbound.toTerm()
               val t2 = e2.bindUnbound.toTerm()
+              
+              
+              //val gg1 = new LoggingGG(sc(gcont), t1).map(residualize).map(runTests(t1))
+              //val gg2 = new LoggingGG(sc(gcont), t2).map(residualize).map(runTests(t2))
               
               val gg1 = GraphGenerator(sc(gcont), t1).map(residualize).map(runTests(t1))
               val gg2 = GraphGenerator(sc(gcont), t2).map(residualize).map(runTests(t2))
@@ -326,6 +336,35 @@ class EqProvingProblem extends SupercompilationProblem {
               withTimeout(findEqual(gg1, gg2), timeout) match {
                 case None => 1111f // better than exit on timeout
                 case Some(t) => t._2
+              }
+            case PropEq(e1, e2) =>
+              val t1 = e1.bindUnbound.toTerm()
+              val t2 = e2.bindUnbound.toTerm()
+              
+              
+              //val gg1 = new LoggingGG(sc(gcont), t1).map(residualize).map(runTests(t1))
+              //val gg2 = new LoggingGG(sc(gcont), t2).map(residualize).map(runTests(t2))
+              
+              //val gg1 = GraphGenerator(sc(gcont), t1).map(residualize).map(runTests(t1))
+              //val gg2 = GraphGenerator(sc(gcont), t2).map(residualize).map(runTests(t2))
+              
+              val tr1 = runTests(t1)
+              val tr2 = runTests(t2)
+              
+              val gg = (new EqProvingGG(sc(gcont), t1, sc(gcont), t2)).map {
+                case (g1, g2) =>
+                  val r1 = tr1(residualize(g1))
+                  val r2 = tr2(residualize(g2))
+                  
+                  //println("left:\n" + NamedSyntax.named(r1))
+                  //println("right:\n" + NamedSyntax.named(r2))
+                  
+                  r1 == r2
+              }
+              
+              withTimeout(gg.zipWithIndex.find(_._1 == true), timeout) match {
+                case None => 1111f // better than exit on timeout
+                case Some(t) => t._2 + 1
               }
             case PropReturnsConstr(e1, ctr) =>
               val t1 = e1.bindUnbound.toTerm()

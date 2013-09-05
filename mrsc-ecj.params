@@ -62,16 +62,23 @@ eval.problem.testing = true
 eval.problem.timeout = 2
 
 eval.problem.fileset = ../graphsc/samples/alpha.set
-pop.subpop.0.species.fitness.num-objectives = 22
+pop.subpop.0.species.fitness.num-objectives = 24
 
 # This part is actually generated
-pop.subpop.0.species.genome-size = 4
+pop.subpop.0.species.genome-size = 5
 pop.subpop.0.species.min-gene.0 = 0
 pop.subpop.0.species.max-gene.0 = 2
 pop.subpop.0.species.min-gene.1 = 0
 pop.subpop.0.species.max-gene.1 = 1
 pop.subpop.0.species.min-gene.2 = 0
-pop.subpop.0.species.max-gene.2 = 16
+pop.subpop.0.species.max-gene.2 = 2
 pop.subpop.0.species.min-gene.3 = 0
-pop.subpop.0.species.max-gene.3 = 2
+pop.subpop.0.species.max-gene.3 = 16
+pop.subpop.0.species.min-gene.4 = 1000
+pop.subpop.0.species.max-gene.4 = 1000
+
+pop.subpop.0.species.mutation-type.4 = integer-random-walk
+pop.subpop.0.random-walk-probability.4 = 0.9
+pop.subpop.0.random-walk-probability.bounded.4 = true
+
 

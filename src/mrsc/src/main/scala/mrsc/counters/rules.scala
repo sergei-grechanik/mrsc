@@ -60,7 +60,7 @@ class FastMRCountersRules(protocol: Protocol, l: Int)
 
   override def drive(g: G): List[S] =
     for (
-      AddChildNodesStep(ns) <- super.drive(g);
+      AddChildNodesStep(ns, _) <- super.drive(g);
       if ns.forall(c => !protocol.unsafe(c._1))
     ) yield AddChildNodesStep(ns)
 

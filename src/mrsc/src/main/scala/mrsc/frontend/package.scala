@@ -32,8 +32,10 @@ package object frontend {
         val n = j.next
         for(t <- n) {
           count += 1
+          println(NamedSyntax.named(t))
           if(oset.contains(t)) return Some((t, count))
         }
+        println("")
         myset ++= n
       }
       None

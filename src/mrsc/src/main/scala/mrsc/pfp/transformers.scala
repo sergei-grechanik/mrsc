@@ -45,10 +45,10 @@ case class InteractiveMRSC(val gc: GContext) extends PFPRules
   }
 
   def showStep(step: S) = step match {
-    case RebuildStep(c) => "RB: " + NamelessShows.s(c)
-    case AddChildNodesStep(cs) => "CH: " + cs.map(x => NamelessShows.s(x._1)).mkString(", ")
-    case FoldStep(_) => "FOLD"
-    case CompleteCurrentNodeStep() => "Complete"
+    case RebuildStep(c, _) => "RB: " + NamelessShows.s(c)
+    case AddChildNodesStep(cs, _) => "CH: " + cs.map(x => NamelessShows.s(x._1)).mkString(", ")
+    case FoldStep(_, _) => "FOLD"
+    case CompleteCurrentNodeStep(_) => "Complete"
   }
 }
 

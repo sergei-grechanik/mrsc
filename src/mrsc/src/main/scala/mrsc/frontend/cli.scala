@@ -65,6 +65,15 @@ object CLI {
       case "sc1" => SC1
       case "sc2" => SC2
       case "sc3" => SC3
+      case "my" =>
+        import Combinators._
+        val w = withHistFilterW(control, he3ByCouplingWhistle)
+        val reb = orElse(upperBiRebuilding(msg), lowerBiRebuilding(msg))
+        val reb1 = concat(upperBiRebuilding(mkBiRebuilder(appRebuilder)), lowerBiRebuilding(mkBiRebuilder(appRebuilder)))
+        val reb2 = rebuildingSCRule(allRebuildings)
+        val appreb = rebuildingSCRule(appRebuilder)
+        mkSC(orElse(folding, withWhistleOrElse(w, reb, driving)))
+        mkSC(concat(folding, ifNoWhistle(sizeWhistle(20), concat(reb2, driving))))
       case "custom" =>
         implicit def strToPair(s: String): (String, String) = (s, s)
         
@@ -123,6 +132,7 @@ object CLI {
   }
   
   def main(args: Array[String]) {
+    //val args = "--sc my -- /home/mouseentity/projs/graphsc/samples/add-assoc".split(" ")
     if(args.size >= 1 && args(0) == "evolve") {
       Evolve.main(args.tail)
     }
@@ -145,4 +155,36 @@ object CLI {
           goodfits.size + " " + goodfits.sum + " " + fit)
     }
   }
+}
+
+class LoggingGG(rules1: GraphRewriteRules[MetaTerm, Label], conf1: MetaTerm, withHistory1: Boolean = false)
+  extends GraphGenerator[MetaTerm, Label](rules1, conf1, withHistory1) {
+
+  import scala.collection.mutable.Queue
+  import scala.collection.mutable.ListBuffer
+  
+  protected override def normalize(): Unit =
+    while (completeGs.isEmpty && !pendingGs.isEmpty) {
+      val pendingDelta = ListBuffer[SGraph[MetaTerm, Label]]()
+      val g = pendingGs.head
+      val steps = rules.steps(g)
+      g.current.conf match {
+        case t:Term =>
+          println("\nterm:\n" + NamedSyntax.named(t))
+        case c =>
+          println("\nterm(?):\n" + c)
+      }
+      for(s <- steps)
+        println(s)
+      println("")
+      val rewrittenGs = steps map { GraphGenerator.executeStep(_, g, withHistory) }
+      for (g1 <- rewrittenGs)
+        if (g1.isComplete) {
+          completeGs.enqueue(g1)
+          println("!!! New complete graph!")
+        } else {
+          pendingDelta += g1
+        }
+      pendingGs = pendingDelta ++: pendingGs.tail
+    }
 }
