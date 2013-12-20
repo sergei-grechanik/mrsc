@@ -119,3 +119,15 @@ with HE3ByCouplingWhistle
 with UpperMsgOrLowerMsgOnBinaryWhistle
 
 object SC3 extends PFPSC
+
+case class SC4(val gc: GContext) extends PFPRules
+with PFPSemantics
+with PositiveDriving
+with AllFoldingCandidates
+with Folding
+with AllEmbeddingCandidates
+with NoWhistle
+with NoRebuildings
+
+object SC4 extends PFPSC
+

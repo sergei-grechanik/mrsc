@@ -65,6 +65,7 @@ object CLI {
       case "sc1" => SC1
       case "sc2" => SC2
       case "sc3" => SC3
+      case "sc4" => SC4
       case "my" =>
         import Combinators._
         val w = withHistFilterW(control, he3ByCouplingWhistle)
@@ -73,7 +74,7 @@ object CLI {
         val reb2 = rebuildingSCRule(allRebuildings)
         val appreb = rebuildingSCRule(appRebuilder)
         mkSC(orElse(folding, withWhistleOrElse(w, reb, driving)))
-        mkSC(concat(folding, ifNoWhistle(sizeWhistle(20), concat(reb2, driving))))
+        mkSC(orElse(folding, ifNoWhistle(w, concat(driving, reb2))))
       case "custom" =>
         implicit def strToPair(s: String): (String, String) = (s, s)
         
@@ -153,6 +154,8 @@ object CLI {
       val goodfits = fit.filter(_ < 100)
       System.err.println("Evaluated: " + 
           goodfits.size + " " + goodfits.sum + " " + fit)
+      if(goodfits.size < fit.size)
+        System.exit(1)
     }
   }
 }

@@ -47,7 +47,7 @@ class EqProvingGG(
     }
   
   def stepPairs(g1: G, g2: G): List[(S, S)] = {
-    if(subclass.equiv(g1.current.conf, g2.current.conf)) {
+    if(!g1.isComplete && !g2.isComplete && subclass.equiv(g1.current.conf, g2.current.conf)) {
       //println("eq: " + NamedSyntax.named(g1.current.conf.asInstanceOf[Term]))
       return List((CompleteCurrentNodeStep(), CompleteCurrentNodeStep()))
     }

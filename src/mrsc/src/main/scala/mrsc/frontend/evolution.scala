@@ -334,7 +334,7 @@ class EqProvingProblem extends SupercompilationProblem {
               val gg2 = GraphGenerator(sc(gcont), t2).map(residualize).map(runTests(t2))
               
               withTimeout(findEqual(gg1, gg2), timeout) match {
-                case None => 1111f // better than exit on timeout
+                case None => 999f
                 case Some(t) => t._2
               }
             case PropEq(e1, e2) =>
@@ -363,7 +363,7 @@ class EqProvingProblem extends SupercompilationProblem {
               }
               
               withTimeout(gg.zipWithIndex.find(_._1 == true), timeout) match {
-                case None => 1111f // better than exit on timeout
+                case None => 999f
                 case Some(t) => t._2 + 1
               }
             case PropReturnsConstr(e1, ctr) =>
@@ -371,7 +371,7 @@ class EqProvingProblem extends SupercompilationProblem {
               val gg1 = GraphGenerator(sc(gcont), t1).map(residualize).map(runTests(t1))
               
               withTimeout(findReturning(gg1, ctr), timeout) match {
-                case None => 1111f // better than exit on timeout
+                case None => 999f
                 case Some(t) => t._2
               }
             case _ =>
@@ -381,7 +381,7 @@ class EqProvingProblem extends SupercompilationProblem {
         } catch {
           case e:TimeoutException =>
             System.err.println("Timeout")
-            2222f
+            999f
           case e:Throwable =>
             System.err.println(e)
             System.err.println(info)
